@@ -11,7 +11,7 @@
         <label class="filter-label">分析模式：</label>
         <el-select
           v-model="query.analysis_mode"
-          placeholder="全部"
+          placeholder="所有模式"
           clearable
           class="w-150"
           @clear="onSearch"
@@ -25,7 +25,7 @@
         <label class="filter-label">状态：</label>
         <el-select
           v-model="query.camera_status"
-          placeholder="全部"
+          placeholder="所有状态"
           clearable
           class="w-150"
           @clear="onSearch"
@@ -176,19 +176,20 @@ const query = reactive({
 })
 
 const analysisModes = ref([
-  { label: '无', value: 4 },
-  { label: '安全规范', value: 1 },
-  { label: '区域入侵', value: 2 },
-  { label: '火警', value: 3 }
+  { label: '无', value: 0 },
+  { label: '全部', value: 1 },
+  { label: '安全规范', value: 2 },
+  { label: '区域入侵', value: 3 },
+  { label: '火警', value: 4 }
 ])
 const statusList = ref([
   { label: '离线', value: 0 },
-  { label: '忙碌', value: 2 },
+  { label: '忙碌（安全分析中）', value: 2 },
   { label: '在线', value: 1 }
 ])
 
-const ANALYSIS_MAP = { 4: '无', 1: '安全规范', 2: '区域入侵', 3: '火警' }
-const STATUS_MAP   = { 0: '离线', 1: '在线', 2: '忙碌' }
+const ANALYSIS_MAP = { 0: '无', 1:'全部', 2: '安全规范', 3: '区域入侵', 4: '火警' }
+const STATUS_MAP   = { 0: '离线', 1: '在线', 2: '忙碌（安全分析中）' }
 const analysisLabel = v => ANALYSIS_MAP[v] ?? v
 const statusLabel   = v => STATUS_MAP[v] ?? v
 const analysisTagType = v => ({ 0: 'info', 1: 'success', 2: 'warning', 3: 'danger' }[v] ?? 'info')

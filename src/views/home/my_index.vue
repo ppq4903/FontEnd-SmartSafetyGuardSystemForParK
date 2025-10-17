@@ -28,7 +28,17 @@
     </el-card>
 
     <div class="spacer"></div>
-
+    <!-- 快捷入口 -->
+    <el-card shadow="never">
+      <div class="card-head"><el-icon><Compass /></el-icon> 快捷入口</div>
+      <div class="spacer"></div>
+      <div class="quick-entry">
+        <el-button type="primary" @click="$router.push('/alarm')">告警中心</el-button>
+        <el-button @click="$router.push('/sys')">摄像头管理</el-button>
+        <el-button @click="exportReport">导出报表</el-button>
+      </div>
+    </el-card>
+    <div class="spacer"></div>
     <!-- 网格区域 -->
     <div class="grid">
       <!-- 今日处理率 -->
@@ -78,18 +88,6 @@
         <div id="chart-total" class="chart"></div>
       </el-card>
     </div>
-
-    <div class="spacer"></div>
-
-    <!-- 快捷入口 -->
-    <el-card shadow="never">
-      <div class="card-head"><el-icon><Compass /></el-icon> 快捷入口</div>
-      <div class="quick-entry">
-        <el-button type="primary" @click="$router.push('/alarm')">告警中心</el-button>
-        <el-button @click="$router.push('/sys')">摄像头管理</el-button>
-        <el-button @click="exportReport">导出报表</el-button>
-      </div>
-    </el-card>
   </div>
 </template>
 

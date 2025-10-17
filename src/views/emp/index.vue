@@ -11,7 +11,6 @@
       <el-input type="textarea" :rows="6" v-model="rawText" readonly />
     </el-card>
 
-    <h2 class="page-title">员工管理</h2>
 
     <!-- 工具栏 -->
     <div class="toolbar">

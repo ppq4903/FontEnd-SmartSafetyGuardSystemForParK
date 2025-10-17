@@ -70,7 +70,7 @@ export function deleteCameras (ids) {
   return request.delete(`/camera_infos/${path}`)
 }
 
-// 可选：截图
+// 可选：截图（若后端支持）——前端也已提供 canvas 截图，无此接口也可用
 export async function requestSnapshot (cameraId) {
   const res = await request.get(`/camera_infos/${cameraId}/snapshot`, { responseType: 'blob' })
   return res?.data ?? res
