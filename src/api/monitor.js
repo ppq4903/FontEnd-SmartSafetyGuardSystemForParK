@@ -70,8 +70,31 @@ export function deleteCameras (ids) {
   return request.delete(`/camera_infos/${path}`)
 }
 
-// 可选：截图（若后端支持）——前端也已提供 canvas 截图，无此接口也可用
+// 可选：截图（若后端支持）
 export async function requestSnapshot (cameraId) {
   const res = await request.get(`/camera_infos/${cameraId}/snapshot`, { responseType: 'blob' })
   return res?.data ?? res
+}
+
+/* ---------------------- 新增：前端测试视频清单与工具 ---------------------- */
+/**
+ * 说明：
+ * 1) 这些 mp4 文件来自后端项目的 app/test_videos/ 目录。
+ * 2) 为了能在前端 <video> 直接播放，请把它们通过静态资源映射到 HTTP：
+ *    - 推荐：在前端 public/test_videos 下放同名文件；或
+ *    - 配置 Nginx / 后端静态路由把 /test_videos/* 映射到后端的实际文件。
+ * 3) 可用环境变量定制基础路径：VITE_VIDEO_BASE_PATH，默认 '/test_videos/'。
+ */
+export const VIDEO_BASE_PATH = import.meta.env.VITE_VIDEO_BASE_PATH || '/test_videos/'
+export const TEST_VIDEO_FILES = [
+  'all.mp4',
+  'fire_smoke.mp4',
+  'helmet_vest.mp4',
+  'person_vehicle.mp4'
+]
+export function buildTestVideoUrl (file, base = VIDEO_BASE_PATH) {
+  return `${base}${file}`
+}
+export function getTestVideoList (base = VIDEO_BASE_PATH) {
+  return TEST_VIDEO_FILES.map(f => buildTestVideoUrl(f, base))
 }
