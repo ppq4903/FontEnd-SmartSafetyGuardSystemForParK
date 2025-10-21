@@ -277,7 +277,10 @@ const form = reactive({
   analysis_mode: 0,
   camera_status: 1
 })
-const rtspPattern = /^rtsp:\/\/[^:\s]+:[^@\s]+@[\d.]+:\d+\/.+/i
+// 支持两种格式：
+// 1. local:filename.mp4 格式
+// 2. rtsp://IP:端口/流地址 格式（可带或不带用户名密码）
+const rtspPattern = /^(local:\S+\.mp4$|rtsp:\/\/[^:\s]+(:[^@\s]+)?@?[\d.]+:\d+\/\S*)$/i
 const rules = {
   camera_name: [{ required: true, message: '请输入摄像头名称', trigger: 'blur' }],
   park_area_id: [{ required: true, message: '请输入所属园区ID', trigger: 'change' }],

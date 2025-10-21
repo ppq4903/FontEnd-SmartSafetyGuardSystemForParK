@@ -38,8 +38,10 @@ export const CAMERA_STATUS_OPTIONS = Object.entries(CAMERA_STATUS_MAP).map(
   ([value, label]) => ({ label, value: Number(value) })
 )
 
-// 仅允许：rtsp://IP:端口/流地址
-export const RTSP_REGEX = 
+// 允许两种格式：
+// 1. local:filename.mp4 格式
+// 2. rtsp://IP:端口/流地址 格式
+export const RTSP_REGEX = /^(local:\S+\.mp4$|rtsp:\/\/[^:\s]+(:[^@\s]+)?@?[\d.]+:\d+\/\S*)$/i
 
 // ---------- 查询/分页参数归一 ----------
 const normalizePageParams = (params = {}) => {

@@ -77,10 +77,11 @@ export const VIDEO_BASE_PATH = import.meta.env.VITE_VIDEO_BASE_PATH || '/test_vi
 
 function defaultBindings () {
   return {
-    1: 'helmet_vest.mp4',
-    2: 'all.mp4',
-    3: 'fire_smoke.mp4',
-    4: 'person_vehicle.mp4'
+    1: 'all.mp4',
+    2: 'helmet_vest.mp4',
+    3: 'person_vehicle.mp4',
+    4: 'fire_smoke.mp4'
+    
   }
 }
 
@@ -111,11 +112,28 @@ export function getCameraSlots () {
 export function getBoundVideoUrl (cameraId) {
   const map = loadBindings()
   const file = map?.[cameraId]
-  return file ? buildTestVideoUrl(file) : ''
+  // 处理local:格式的视频路径，直接返回而不添加基础路径
+  return file ? (file.startsWith('local:') ? file : buildTestVideoUrl(file)) : ''
 }
 
 /** 被绑定的视频相机ID数组（升序） */
 export function getBoundCameraIds () {
   const map = loadBindings()
   return Object.keys(map).map(Number).sort((a, b) => a - b)
+}
+
+/**
+ * 推送告警信息到后端数据库
+ * @param {Object} alarmData - 告警数据对象
+ * @param {string} alarmData.camera_id - 摄像头ID
+ * @param {string} alarmData.camera_name - 摄像头名称
+ * @param {string} alarmData.park_area - 园区区域
+ * @param {number} alarmData.alarm_type - 告警类型 (0-安全规范, 1-区域入侵, 2-火警)
+ * @param {number} alarmData.alarm_status - 告警状态 (0-未处理)
+ * @param {string} alarmData.alarm_time - 告警时间
+ * @param {string} alarmData.detection_type - 检测类型描述
+ */
+export function pushAlarmToDatabase(alarmData) {
+  // 调用后端告警管理API推送告警信息
+  return request.post('/alarms/create', alarmData)
 }
