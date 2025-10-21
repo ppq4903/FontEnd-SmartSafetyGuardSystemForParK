@@ -80,8 +80,12 @@ function defaultBindings () {
     1: 'all.mp4',
     2: 'helmet_vest.mp4',
     3: 'person_vehicle.mp4',
-    4: 'fire_smoke.mp4'
-    
+    4: 'fire_smoke.mp4',
+    // 新增摄像头5-8的绑定
+    5: 'local:all.mp4',
+    6: 'local:all.mp4',
+    7: 'local:fire_smoke.mp4',
+    8: 'local:person_vehicle.mp4'
   }
 }
 
@@ -112,28 +116,19 @@ export function getCameraSlots () {
 export function getBoundVideoUrl (cameraId) {
   const map = loadBindings()
   const file = map?.[cameraId]
-  // 处理local:格式的视频路径，直接返回而不添加基础路径
-  return file ? (file.startsWith('local:') ? file : buildTestVideoUrl(file)) : ''
+  if (!file) return ''
+  
+  // 处理local:格式的视频路径，提取文件名并构建正确的URL
+  if (file.startsWith('local:')) {
+    const fileName = file.substring(6) // 移除'local:'前缀
+    return buildTestVideoUrl(fileName)
+  }
+  
+  return buildTestVideoUrl(file)
 }
 
 /** 被绑定的视频相机ID数组（升序） */
 export function getBoundCameraIds () {
   const map = loadBindings()
   return Object.keys(map).map(Number).sort((a, b) => a - b)
-}
-
-/**
- * 推送告警信息到后端数据库
- * @param {Object} alarmData - 告警数据对象
- * @param {string} alarmData.camera_id - 摄像头ID
- * @param {string} alarmData.camera_name - 摄像头名称
- * @param {string} alarmData.park_area - 园区区域
- * @param {number} alarmData.alarm_type - 告警类型 (0-安全规范, 1-区域入侵, 2-火警)
- * @param {number} alarmData.alarm_status - 告警状态 (0-未处理)
- * @param {string} alarmData.alarm_time - 告警时间
- * @param {string} alarmData.detection_type - 检测类型描述
- */
-export function pushAlarmToDatabase(alarmData) {
-  // 调用后端告警管理API推送告警信息
-  return request.post('/alarms/create', alarmData)
 }

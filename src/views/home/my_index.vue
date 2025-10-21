@@ -273,38 +273,64 @@ function renderCharts (todayCounts, totalCounts) {
   })
 }
 
+// ========= 工具：日期处理 =========
+function isToday(dateString) {
+  try {
+    const date = new Date(dateString)
+    const today = new Date()
+    return date.getFullYear() === today.getFullYear() &&
+           date.getMonth() === today.getMonth() &&
+           date.getDate() === today.getDate()
+  } catch {
+    return false
+  }
+}
+
 // ========= 加载 =========
 async function loadData () {
-  // 1) 顶部未解决（含未处理/处理中）
-  const r = await apiGetRecentUnresolved({ limit: 5, skip: 0 }).catch(() => ({}))
+  // 1) 顶部未解决（含未处理/处理中）- 增加数量以便滚动查看
+  // 简化API调用参数，避免复杂参数格式
+  const r = await apiGetRecentUnresolved().catch(() => ({}))
   const list1 = pickList(r?.data ?? r)
   let unresolved = list1
   if (!unresolved.length) {
-    const all = await apiGetAlarms({ status_in: '0,2', limit: 5, skip: 0 }).catch(() => ({}))
+    const all = await apiGetAlarms().catch(() => ({}))
     unresolved = pickList(all?.data ?? all)
   }
-  alarms.value = unresolved.slice(0, 5)
-  pendingTotal.value = (r?.data?.total ?? r?.total ?? unresolved.length) || unresolved.length
+  // 过滤出未处理和处理中的告警
+  unresolved = unresolved.filter(alarm => alarm.alarm_status === 0 || alarm.alarm_status === 2)
+  // 移除限制，显示所有未处理告警
+  alarms.value = unresolved
+  pendingTotal.value = unresolved.length
 
-  // 2) 今日处理率
-  const rt = await apiGetTodayHandleReport().catch(() => ({}))
-  const d = (rt?.data ?? rt) || {}
-  const done = pickNumber(d.done, 0)
-  const total = pickNumber(d.total ?? (d.done ?? 0) + (d.pending ?? 0), 0)
-  const pending = pickNumber(d.pending ?? Math.max(total - done, 0), 0)
-  rate.done = done
-  rate.total = total
-  rate.pending = pending
-  rate.rate = total ? done / total : 0
+  // 2) 获取所有告警记录用于筛选当日数据
+  // 简化API调用参数
+  const allAlarms = await apiGetAlarms().catch(() => ({}))
+  const allAlarmRows = pickList(allAlarms?.data ?? allAlarms)
+  
+  // 筛选今日告警记录
+  const todayAlarms = allAlarmRows.filter(alarm => isToday(alarm.alarm_time))
+  
+  // 3) 今日处理率 - 根据筛选后的当日告警计算
+  const todayTotal = todayAlarms.length
+  const todayDone = todayAlarms.filter(alarm => alarm.alarm_status === 3 || alarm.alarm_status === 1).length // 处理完成或误报
+  const todayPending = todayTotal - todayDone
+  
+  rate.done = todayDone
+  rate.total = todayTotal
+  rate.pending = todayPending
+  rate.rate = todayTotal ? todayDone / todayTotal : 0
 
-  // 3) 摄像头状态（优先接口，否则回退聚合）
+  // 4) 摄像头状态（优先接口，否则回退聚合）
   let statObj = {}
   try {
+    // 简化API调用
     const s = await apiGetCameraStatusReport()
     statObj = normalizeCameraStat(s?.data ?? s)
   } catch {}
   if (!statObj.online && !statObj.offline && !statObj.busy) {
-    const cams = await apiGetCameraInfos({ limit: 1000, skip: 0 }).catch(() => ({}))
+    // 简化API调用参数
+    const cams = await apiGetCameraInfos().catch(() => ({}))
     const rows = pickList(cams?.data ?? cams)
     statObj = normalizeCameraStat(null, rows)
   }
@@ -312,17 +338,23 @@ async function loadData () {
   cameraStat.offline = statObj.offline
   cameraStat.busy = statObj.busy
 
-  // 4) 今日/历史图表
-  const today = await apiGetTodayReport().catch(() => ({}))
+  // 5) 今日各类告警分布 - 根据筛选后的当日告警计算
+  const todayCounts = todayAlarms.reduce((acc, alarm) => {
+    const t = Number(alarm.alarm_type)
+    if (t === 0 || t === 1 || t === 2) acc[t]++
+    return acc
+  }, { 0: 0, 1: 0, 2: 0 })
+  
+  // 历史告警汇总
+  let totalCounts = { 0: 0, 1: 0, 2: 0 }
   const totalRep = await apiGetAllReport().catch(() => ({}))
-  let todayCounts = normalizeTypeReport(today)
-  let totalCounts = normalizeTypeReport(totalRep)
-
+  if (totalRep) {
+    totalCounts = normalizeTypeReport(totalRep)
+  }
+  
   // 若历史汇总全为 0，则回退到告警列表聚合
   if ((totalCounts[0] + totalCounts[1] + totalCounts[2]) === 0) {
-    const all = await apiGetAlarms({ limit: 1000, skip: 0 }).catch(() => ({}))
-    const rows = pickList(all?.data ?? all)
-    totalCounts = rows.reduce((acc, r) => {
+    totalCounts = allAlarmRows.reduce((acc, r) => {
       const t = Number(r.alarm_type)
       if (t === 0 || t === 1 || t === 2) acc[t]++
       return acc
@@ -366,7 +398,7 @@ onMounted(loadData)
 /* 顶部告警条 */
 .alarm-bar__head{display:flex;justify-content:space-between;align-items:center}
 .badge{display:inline-block;background:#fef0f0;color:#f56c6c;border-radius:2px;padding:2px 8px}
-.alarm-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.alarm-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:500px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#dcdfe6 #f0f2f5}.alarm-list::-webkit-scrollbar{width:8px}.alarm-list::-webkit-scrollbar-track{background:#f0f2f5;border-radius:4px}.alarm-list::-webkit-scrollbar-thumb{background:#dcdfe6;border-radius:4px}.alarm-list::-webkit-scrollbar-thumb:hover{background:#c0c4cc}
 .alarm-item{display:flex;align-items:center;gap:8px}
 .alarm-content{display:flex;align-items:center;gap:8px;flex:1;flex-wrap:nowrap}
 .alarm-content > span:first-of-type{flex-shrink:0}

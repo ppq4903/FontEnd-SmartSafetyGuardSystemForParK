@@ -189,23 +189,6 @@ const handleForm = reactive({
 
 /* 标签映射 */
 const alarmTypeText = (t) => ({ 0: '安全规范', 1: '区域入侵', 2: '火警', 3: '无' }[t] ?? '-')
-
-// 定时刷新告警列表，确保及时显示新推送的告警
-let refreshTimer = null;
-function startAutoRefresh() {
-  // 每30秒自动刷新一次告警列表
-  refreshTimer = setInterval(() => {
-    fetchList();
-    console.log('自动刷新告警列表');
-  }, 30000);
-}
-
-function stopAutoRefresh() {
-  if (refreshTimer) {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
-  }
-}
 const alarmStatusText = (s) => ({ 0: '未处理', 1: '误报', 2: '处理中', 3: '已处理' }[s] ?? '-')
 
 /* 彩色标签样式 */
@@ -335,15 +318,7 @@ async function delOne(row) {
   fetchList()
 }
 
-onMounted(() => {
-  fetchList();
-  startAutoRefresh();
-})
-
-// 组件卸载时清除定时器
-function onUnmounted() {
-  stopAutoRefresh();
-}
+onMounted(fetchList)
 </script>
 
 <style scoped>

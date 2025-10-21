@@ -206,25 +206,8 @@ import {
   getCameraSlots,
   getBoundCameraIds,
   buildTestVideoUrl,
-  getBoundVideoUrl,
-  pushAlarmToDatabase
+  getBoundVideoUrl
 } from '@/api/monitor'
-
-// 扩展getBoundVideoUrl函数，处理后端返回的rtsp_url
-function getVideoUrl(cameraId) {
-  // 首先从cameraList中获取摄像头信息和rtsp_url
-  const camera = cameraList.value.find(c => c.camera_id === cameraId);
-  if (camera && camera.rtsp_url) {
-    // 如果是local:格式，转换为测试视频URL
-    if (camera.rtsp_url.startsWith('local:')) {
-      const filename = camera.rtsp_url.substring(6); // 去掉local:前缀
-      return `/test_videos/${filename}`;
-    }
-    return camera.rtsp_url;
-  }
-  // 回退到API中的绑定逻辑
-  return getBoundVideoUrl(cameraId);
-}
 
 /* ======= 映射：状态 / 模式 ======= */
 // 增加检测结果处理函数
@@ -260,6 +243,16 @@ const modeMap = {
 const cameraList = ref([])
 const regionId = ref(null)             // 上：区域
 const cameraIdInRegion = ref(null)     // 下：该区域下的摄像头
+// 监听摄像头选择变化
+watch(cameraIdInRegion, () => {
+  if (layoutKey.value === '1x1') {
+    singlePage.value = 0;
+    nextTick(playSingle);
+  } else {
+    wallPage.value = 0;
+    nextTick(initPlayers);
+  }
+})
 const selectedCameraIds = ref([])      // 批量启停
 const regionOptions = computed(() => {
   const map = new Map()
@@ -284,12 +277,29 @@ const filteredCameras = computed(() => {
   }
   return cameraList.value
 })
-function onRegionChange () { cameraIdInRegion.value = null }
+function onRegionChange () { 
+  cameraIdInRegion.value = null;
+  // 确保筛选逻辑正确应用
+  if (layoutKey.value === '1x1') {
+    singlePage.value = 0;
+    nextTick(playSingle);
+  } else {
+    wallPage.value = 0;
+    nextTick(initPlayers);
+  }
+}
 function previewRow (row) { previewCamera(row) }
 function previewCamera (row) {
-  layoutKey.value = '1x1'
-  const idx = filteredCameras.value.findIndex(c => c.camera_id === row.camera_id)
-  if (idx >= 0) { singlePage.value = idx; nextTick(playSingle) }
+  layoutKey.value = '1x1';
+  const idx = filteredCameras.value.findIndex(c => c.camera_id === row.camera_id);
+  if (idx >= 0) {
+    singlePage.value = idx;
+    nextTick(() => {
+      playSingle();
+      // 确保1x1模式下正确显示视频
+      console.log('预览摄像头:', row.camera_name, '索引:', idx);
+    });
+  }
 }
 
 async function loadCameras () {
@@ -316,7 +326,8 @@ const wallCells = computed(() => {
   const cells = Array.from({ length: wallPageSize.value }).map((_, i) => {
     const cam = wallSlice.value[i]
     if (!cam) return null
-    const src = getVideoUrl(cam.camera_id)
+    const src = getBoundVideoUrl(cam.camera_id)
+    console.log('Wall cell video URL:', cam.camera_name, 'URL:', src)
     return { camera: cam, src }
   })
   return cells
@@ -326,20 +337,44 @@ function wallNext () { wallPage.value = (wallPage.value + 1) % wallTotalPages.va
 
 const videoRefs = ref([])
 const setVideoRef = (el, i) => { videoRefs.value[i] = el }
-function initPlayers () {
+function initPlayers() {
+  console.log('初始化播放器，当前布局:', layoutKey.value);
   nextTick(() => {
     videoRefs.value.forEach((v, i) => {
-      const cell = wallCells.value[i]
-      if (!v || !cell || !cell.src) return
-      v.src = cell.src
-      const p = v.play(); if (p && p.catch) p.catch(() => {})
-    })
-  })
+      const cell = wallCells.value[i];
+      if (!v || !cell || !cell.camera) {
+        console.log('跳过无效播放器:', i);
+        return;
+      }
+      // 确保src已设置
+      if (!cell.src) {
+        console.warn('缺少视频源:', cell.camera.camera_name);
+        return;
+      }
+      // 重新设置src确保更新
+      v.src = '';
+      v.src = cell.src;
+      console.log('设置播放器:', i, cell.camera.camera_name, cell.src);
+      v.load();
+      v.play().catch((e) => {
+        console.log('播放器播放异常:', i, e);
+      });
+    });
+  });
 }
-function onLayoutChange () {
-  videoRefs.value = []
-  wallPage.value = 0
-  if (layoutKey.value !== '1x1') initPlayers()
+function onLayoutChange() {
+  videoRefs.value = [];
+  wallPage.value = 0;
+  // 确保切换布局时正确初始化
+  if (layoutKey.value !== '1x1') {
+    nextTick(() => {
+      initPlayers();
+      console.log('切换布局:', layoutKey.value);
+    });
+  } else {
+    // 确保在切换到1x1模式时正确播放
+    nextTick(playSingle);
+  }
 }
 function onVideoError (i) { 
   // 提供详细的错误信息以便调试
@@ -354,21 +389,18 @@ const singleVideoRef = ref(null)
 const singlePage = ref(0)
 const singleTotal = computed(() => filteredCameras.value.length || 1)
 const activeSingle = computed(() => filteredCameras.value[singlePage.value] || null)
-const activeSingleSrc = computed(() => activeSingle.value ? getVideoUrl(activeSingle.value.camera_id) : '')
+const activeSingleSrc = computed(() => activeSingle.value ? getBoundVideoUrl(activeSingle.value.camera_id) : '')
 function playSingle () {
   const v = singleVideoRef.value;
   if (!v || !activeSingle.value) return;
-  
-  // 使用处理后的视频URL
-  const videoUrl = getVideoUrl(activeSingle.value.camera_id);
-  if (videoUrl) {
-    v.src = videoUrl;
-    v.onerror = () => {
-      console.log(`单屏视频加载失败: ${videoUrl}`);
-    };
-    v.load();
-    v.play().catch(() => {});
-  }
+  // 直接使用activeSingleSrc计算属性的值，避免重复调用getBoundVideoUrl
+  v.src = activeSingleSrc.value;
+  v.load();
+  v.play().catch((e) => {
+    console.log('视频播放异常:', e);
+  });
+  // 确保在1x1模式下正确显示
+  console.log('播放单个视频:', activeSingle.value.camera_name, 'URL:', v.src);
 }
 function prevSingle () { 
   singlePage.value = (singlePage.value - 1 + singleTotal.value) % singleTotal.value; 
@@ -387,124 +419,57 @@ let ws
 function connectAlarmWS () {
   const url = import.meta.env.VITE_WS_ALARM_URL || 'ws://localhost:8000/ws/alarms'
   ws = new WebSocket(url)
-  // 前端模拟告警功能：检测特定本地视频文件并自动生成火警告警
-    function setupMockAlarms() {
-      // 定时检查所有摄像头，为特定视频文件的摄像头生成火警告警
-      setInterval(() => {
-        cameraList.value.forEach(camera => {
-          const cid = camera.camera_id;
-          const rtspUrl = camera.rtsp_url || '';
-          
-          // 检查是否是需要模拟火警的视频文件
-          if (rtspUrl.includes('local:fire_smoke.mp4') || rtspUrl.includes('local:all.mp4')) {
-            if (!cellState[cid]) cellState[cid] = {};
-            
-            // 设置火警告警信息
-            cellState[cid].result = '火警';
-            cellState[cid].alarm = '火警';
-            cellState[cid].time = new Date().toLocaleString('zh-CN');
-            
-            // 添加火焰和烟雾检测详情
-            cellState[cid].detections = [
-              { type: 'fire', confidence: 0.95, class: '火焰' },
-              { type: 'smoke', confidence: 0.92, class: '烟雾' }
-            ];
-            
-            // 添加到告警记录
-            if (!alarmsByCamera[cid]) alarmsByCamera[cid] = [];
-            alarmsByCamera[cid].unshift({
-              id: `${cid}-${Date.now()}`,
-              type: '火警',
-              time: cellState[cid].time,
-              level: 'danger',
-              snapshot: null
-            });
-            
-            // 限制告警记录数量
-            if (alarmsByCamera[cid].length > 50) alarmsByCamera[cid].length = 50;
-            
-            // 每1分钟向告警管理数据库推送一次新告警（通过WebSocket模拟）
-              if (Math.random() < 0.17) { // 模拟每6次检查中有1次推送（约1分钟）
-                sendAlarmToDatabase(cid, camera);
-              }
-          }
-        });
-      }, 5000); // 每5秒检查一次
-    }
-    
-    // 向后端告警管理数据库推送告警
-    async function sendAlarmToDatabase(cameraId, camera) {
-      const alarmData = {
-        camera_id: cameraId,
-        camera_name: camera.camera_name,
-        park_area: camera.park_area_name || '未知区域',
-        alarm_type: 2, // 火警
-        alarm_status: 0, // 未处理
-        alarm_time: new Date().toLocaleString('zh-CN'),
-        detection_type: '火焰+烟雾'
-      };
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data)
+      // 调试日志，记录接收到的WebSocket消息
+      console.log('收到监控消息:', msg);
+      const cid = msg.camera_id
+      if (!cellState[cid]) cellState[cid] = {}
+      // 处理告警数据
+      const alarmType = msg.alarm_type !== undefined ? msg.alarm_type : '无';
       
-      console.log('推送告警到数据库:', alarmData);
-      try {
-        // 调用API推送告警信息
-        await pushAlarmToDatabase(alarmData);
-        console.log('告警推送成功');
-      } catch (error) {
-        console.error('告警推送失败:', error);
-        // 失败时不影响前端显示，继续保持模拟告警
-      }
-    }
-    
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data)
-        // 调试日志，记录接收到的WebSocket消息
-        console.log('收到监控消息:', msg);
-        const cid = msg.camera_id
-        if (!cellState[cid]) cellState[cid] = {}
-        // 优化的告警处理逻辑：
-        // 1. 根据后端约定，只有告警时才会推送消息
-        // 2. 告警类型：0-安全规范 1-区域入侵 2-火警
+      // 只有在有实际告警时才添加到告警记录
+      if (alarmType !== '无' && alarmType !== 3) {
+        // 添加到告警记录
+        if (!alarmsByCamera[cid]) alarmsByCamera[cid] = [];
         
-        // 确定告警类型文本
-        let alarmType = '无';
-        let resultText = '正常';
+        // 使用alarmType作为告警类型文本
+        const typeText = alarmTypeText[alarmType] || '未知告警';
         
-        // 检查是否有有效的告警类型 (0, 1, 2)
-        if (msg.alarm_type !== undefined && [0, 1, 2].includes(msg.alarm_type)) {
-          // 设置对应的告警类型文本
-          alarmType = ['安全规范', '区域入侵', '火警'][msg.alarm_type];
-          resultText = alarmType; // 告警时结果应显示具体告警类型
-        }
-        
-        // 设置检测结果
-        cellState[cid].result = resultText;
-        
-        // 设置告警信息
-        cellState[cid].alarm = alarmType;
-      
-      cellState[cid].time = msg.alarm_time || new Date().toLocaleString('zh-CN');
-      // 存储检测详情，如检测到的对象、置信度等
-      cellState[cid].detections = msg.detections || []
-      // 处理快照URL
-      const last = (msg.snapshot_url || '').split(',').pop()
-      cellState[cid].snapshot = last || null
-
-      // 只有实际发生告警时才添加到告警记录
-      if (alarmType !== '无') {
-        if (!alarmsByCamera[cid]) alarmsByCamera[cid] = []
         alarmsByCamera[cid].unshift({
           id: `${cid}-${Date.now()}`,
-          type: alarmType,
-          time: msg.alarm_time,
-          level: 'danger', // 只要是告警就显示为危险级别
-          snapshot: last || null
-        })
+          type: typeText,
+          time: new Date().toLocaleString('zh-CN'),
+          level: 'danger',
+          snapshot: msg.snapshot || null
+        });
+        
+        // 限制告警记录数量
+        if (alarmsByCamera[cid].length > 50) alarmsByCamera[cid].length = 50;
       }
-      if (alarmsByCamera[cid].length > 50) alarmsByCamera[cid].length = 50
-    } catch (e) {}
+      
+      // 更新cellState状态
+      cellState[cid].result = msg.result || msg.detection_result || '正常';
+      cellState[cid].alarm = alarmType !== '无' && alarmType !== 3 ? alarmTypeText[alarmType] || '未知告警' : '无';
+      cellState[cid].time = new Date().toLocaleString('zh-CN');
+      
+      // 如果有快照，添加快照
+      if (msg.snapshot) cellState[cid].snapshot = msg.snapshot
+      
+      // 如果有检测详情，添加详情
+      if (msg.detections && Array.isArray(msg.detections)) {
+        cellState[cid].detections = msg.detections;
+      }
+    } catch (e) {
+      console.error('解析告警消息失败', e)
+    }
   }
-  ws.onclose = () => setTimeout(connectAlarmWS, 2000)
+  ws.onerror = (e) => console.error('告警WS错误', e)
+  ws.onclose = () => {
+    console.log('告警WS已关闭，稍后重连')
+    setTimeout(connectAlarmWS, 5000)
+  }
 }
 
 /* ======= 后端启停 ======= */
@@ -517,12 +482,16 @@ async function startBoundCameras () {
   ElMessage.success('已发送启动指令（四路绑定）')
 }
 
+// 修复onMounted逻辑，确保正确初始化
 onMounted(async () => {
-  await loadCameras()
-  initPlayers()
-  connectAlarmWS()
-  // 启动前端模拟告警功能
-  setupMockAlarms()
+  await loadCameras();
+  // 先设置布局，再初始化播放器
+  if (layoutKey.value === '1x1') {
+    nextTick(playSingle);
+  } else {
+    nextTick(initPlayers);
+  }
+  connectAlarmWS();
 })
 
 watch(layoutKey, (v) => {
@@ -530,10 +499,21 @@ watch(layoutKey, (v) => {
   else nextTick(initPlayers)
 })
 watch(filteredCameras, () => {
-  wallPage.value = 0
-  if (layoutKey.value === '1x1') { singlePage.value = 0; nextTick(playSingle) }
-  else nextTick(initPlayers)
-})
+  console.log('筛选后的摄像头变化，数量:', filteredCameras.value.length);
+  wallPage.value = 0;
+  if (layoutKey.value === '1x1') {
+    singlePage.value = 0;
+    nextTick(() => {
+      console.log('在filteredCameras变化后播放单个视频');
+      playSingle();
+    });
+  } else {
+    nextTick(() => {
+      console.log('在filteredCameras变化后初始化播放器');
+      initPlayers();
+    });
+  }
+}, { deep: true })
 </script>
 
 <style scoped>
