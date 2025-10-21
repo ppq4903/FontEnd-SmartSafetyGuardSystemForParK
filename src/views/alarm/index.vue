@@ -40,7 +40,7 @@
     <!-- 表格 -->
     <el-table :data="tableData" border stripe @selection-change="onSelectionChange">
       <el-table-column type="selection" width="50" />
-      <el-table-column prop="alarm_id" label="告警ID" width="90" />
+      <el-table-column type="index" label="序号" width="90" :index="(index) => index + 1" />
       <el-table-column prop="alarm_time" label="触发时间" min-width="160" />
       <el-table-column prop="park_area" label="园区区域" min-width="140" />
       <el-table-column prop="camera_name" label="摄像头名称" min-width="160" />

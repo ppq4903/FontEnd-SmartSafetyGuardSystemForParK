@@ -15,7 +15,7 @@
     <!-- 工具栏 -->
     <div class="toolbar">
       <div class="left">
-        <el-button type="primary" icon="el-icon-plus" @click="onAdd">新增员工</el-button>
+        <el-button type="primary" icon="el-icon-plus" @click="onAdd" style="width: 100px;">新增员工</el-button>
         <el-button type="danger" :disabled="multipleSelection.length===0" @click="onBatchDelete">
           批量删除
         </el-button>
@@ -49,12 +49,12 @@
       :header-cell-style="{ background:'#fafafa' }"
     >
       <el-table-column type="selection" width="48" />
-      <el-table-column prop="id" label="员工ID" width="90" sortable="custom" />
+      <el-table-column type="index" label="序号" width="90" :index="indexMethod" />
       <el-table-column prop="user_name" label="账号" min-width="120" sortable="custom" />
       <el-table-column prop="name" label="姓名" min-width="120" sortable="custom" />
       <el-table-column prop="roleLabel" label="角色" min-width="140" />
       <el-table-column prop="phone" label="联系电话" min-width="140" />
-      <el-table-column prop="create_time" label="录入时间" min-width="180" sortable="custom" />
+      <el-table-column prop="create_time" :formatter="formatTime" label="录入时间" min-width="180" sortable="custom" />
       <el-table-column label="操作" fixed="right" width="190">
         <template #default="{row}">
           <el-button size="mini" type="primary" @click="onEdit(row)">编辑</el-button>
@@ -257,6 +257,14 @@ export default {
       }))
     },
 
+    indexMethod(index) {
+      // 返回基于当前页和每页大小的序号
+      return (this.currentPage - 1) * this.pageSize + index + 1;
+    },
+    formatTime(row, column) {
+      const value = row[column.property];
+      return value ? value.replace('T', ' ') : '';
+    },
     // —— 交互（前端分页）——
     onSearch () { this.currentPage = 1 },
     onReset () { this.queryForm = { name: '', role: '' }; this.currentPage = 1 },

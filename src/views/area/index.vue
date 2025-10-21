@@ -4,9 +4,8 @@
     <div class="actionbar-wrap">
       <div class="actionbar">
         <div class="left">
-          <el-button size="small" type="primary" icon="el-icon-plus" @click="openAdd">新增区域</el-button>
+          <el-button type="primary" icon="el-icon-plus" @click="openAdd">新增区域</el-button>
           <el-button
-            size="small"
             type="danger"
             icon="el-icon-delete"
             :disabled="multipleSelection.length === 0"
@@ -21,13 +20,12 @@
                 v-model.trim="query.park_area"
                 placeholder="园区区域（支持模糊查询）"
                 clearable
-                class="w-280"
-                size="small"
+                class="w-320"
               />
             </el-form-item>
             <el-form-item>
-              <el-button size="small" type="primary" @click="onSearch">查询</el-button>
-              <el-button size="small" @click="onReset">重置</el-button>
+              <el-button type="primary" @click="onSearch">查询</el-button>
+              <el-button @click="onReset">重置</el-button>
             </el-form-item>
           </el-form>
         </div>
@@ -56,7 +54,7 @@
         @selection-change="(rows)=>multipleSelection = rows"
       >
         <el-table-column type="selection" width="48" />
-        <el-table-column prop="park_area_id" label="ID" width="80" />
+        <el-table-column type="index" label="序号" width="80" :index="(index) => index + 1" />
         <el-table-column prop="park_area" label="园区区域" min-width="240" show-overflow-tooltip />
         <el-table-column prop="remark" label="备注" min-width="260" show-overflow-tooltip />
         <el-table-column label="创建时间" width="180">
@@ -276,7 +274,7 @@ export default {
 .left { display: flex; gap: 8px; }
 .right { display: flex; align-items: center; }
 .compact-form :deep(.el-form-item) { margin-bottom: 0; margin-right: 8px; }
-.w-280 { width: 280px; }
+.w-320 { width: 320px; }
 
 /* JSON 卡片 */
 .json-card { margin-bottom: 10px; }

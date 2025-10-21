@@ -64,12 +64,12 @@
       @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="44" />
-      <el-table-column prop="camera_name" label="摄像头名称" min-width="160" />
-      <el-table-column prop="park_area" label="所属园区位置" min-width="140" />
-      <el-table-column prop="install_position" label="具体安装位置" min-width="160" />
-      <el-table-column prop="rtsp_url" label="RTSP 地址" min-width="260" show-overflow-tooltip />
+      <el-table-column prop="camera_name" label="摄像头名称" min-width="140" />
+      <el-table-column prop="park_area" label="所属园区位置" min-width="120" />
+      <el-table-column prop="install_position" label="具体安装位置" min-width="140" />
+      <el-table-column prop="rtsp_url" label="RTSP 地址" min-width="200" show-overflow-tooltip />
 
-      <el-table-column label="分析模式" min-width="110">
+      <el-table-column label="分析模式" min-width="100">
         <template #default="{ row }">
           <el-tag :type="analysisTagType(row.analysis_mode)" effect="light">{{ analysisLabel(row.analysis_mode) }}</el-tag>
         </template>
@@ -81,18 +81,26 @@
         </template>
       </el-table-column>
 
-      <el-table-column prop="create_time" :formatter="formatTime" label="录入时间" min-width="170" />
-      <el-table-column prop="update_time" :formatter="formatTime" label="上次更新时间" min-width="170" />
+      <el-table-column prop="create_time" :formatter="formatTime" label="录入时间" min-width="150" />
+      <el-table-column prop="update_time" :formatter="formatTime" label="上次更新时间" min-width="150" />
 
-      <el-table-column label="操作" width="320" fixed="right">
+      <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-          <el-button size="small" @click="handleTest(row)">
-            {{ testingMap[row.camera_id] ? '测试中' : '测试连接' }}
-          </el-button>
-          <el-button size="small" type="success" @click="handleStart(row)">开启检测</el-button>
-          <el-button size="small" type="warning" @click="handleStop(row)">关闭检测</el-button>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div>
+              <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
+              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            </div>
+            <div>
+              <el-button size="small" @click="handleTest(row)" style="width: 118px;">
+                {{ testingMap[row.camera_id] ? '测试中' : '测试连接' }}
+              </el-button>
+            </div>
+            <div>
+              <el-button size="small" type="success" @click="handleStart(row)" style="width: 56px;">开启检测</el-button>
+              <el-button size="small" type="warning" @click="handleStop(row)" style="width: 56px;">关闭检测</el-button>
+            </div>
+          </div>
         </template>
       </el-table-column>
     </el-table>

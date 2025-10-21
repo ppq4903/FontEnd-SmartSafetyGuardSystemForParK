@@ -1,25 +1,13 @@
 import request from '@/utils/request'
 
 /**
- * 与后端接口对齐（不要手动加 /api/v1；若已在 axios baseURL 配置则自动带上）：
- * - GET  /camera_infos/search
- * - GET  /camera_infos/test/{camera_id}
- * - GET  /camera_infos/{camera_info_id}
- * - PUT  /camera_infos/{camera_info_id}
- * - POST /camera_infos/
- * - DELETE /camera_infos/{camera_info_ids}
- * - GET  /safety_analysis/start/{id}、/safety_analysis/stop/{id}
- */
-
-/**
  * 统一查询：返回 { rows, total }
  * 兼容后端可能的返回格式：数组 / {rows|list|items|data, total}
- * 注意：默认 page_size 给足，避免 33 条被分页成 28 条。
  */
 export async function fetchCameraList (filters = {}) {
   const {
     page = 1,
-    page_size = 1000, // 调大默认分页，拿全量
+    page_size = 1000, // 给足分页，避免 33 条被截断
     skip = (page - 1) * page_size,
     limit = page_size,
     park_area_id,
@@ -56,7 +44,7 @@ export function stopAnalysis (cameraId) {
   return request.get(`/safety_analysis/stop/${cameraId}`)
 }
 
-// 单项 CRUD（供已有功能对接）
+// 单项 CRUD
 export function getCameraById (id) {
   return request.get(`/camera_infos/${id}`)
 }
@@ -71,53 +59,63 @@ export function deleteCameras (ids) {
   return request.delete(`/camera_infos/${path}`)
 }
 
-// 可选：截图（若后端支持）
+// 可选：截图
 export async function requestSnapshot (cameraId) {
   const res = await request.get(`/camera_infos/${cameraId}/snapshot`, { responseType: 'blob' })
   return res?.data ?? res
 }
 
-/* ---------------------- 测试视频配置 ---------------------- */
+/* ---------------------- 测试视频与绑定 ---------------------- */
 /**
  * 说明：
- * - 这 4 个 mp4 与你给的目录一致：all.mp4 / fire_smoke.mp4 / helmet_vest.mp4 / person_vehicle.mp4
- * - 在前端 public/test_videos 下放同名文件，或把后端静态目录映射到 /test_videos/
- * - 可用 VITE_VIDEO_BASE_PATH 覆盖基础路径
+ * - 视频放到前端 public/test_videos/ 下（或由网关映射到 /test_videos/）
+ * - 只将 1/2/3/4 号摄像头绑定到这四个视频，其余摄像头不绑定
+ * - 如需修改绑定，可用环境变量 VITE_CAMERA_BINDINGS_JSON 传入对象：
+ *   {"1":"helmet_vest.mp4","2":"all.mp4","3":"fire_smoke.mp4","4":"person_vehicle.mp4"}
  */
 export const VIDEO_BASE_PATH = import.meta.env.VITE_VIDEO_BASE_PATH || '/test_videos/'
-export const TEST_VIDEO_FILES = [
-  'all.mp4',
-  'fire_smoke.mp4',
-  'helmet_vest.mp4',
-  'person_vehicle.mp4'
-]
+
+function defaultBindings () {
+  return {
+    1: 'helmet_vest.mp4',
+    2: 'all.mp4',
+    3: 'fire_smoke.mp4',
+    4: 'person_vehicle.mp4'
+  }
+}
+
+function loadBindings () {
+  try {
+    if (import.meta.env.VITE_CAMERA_BINDINGS_JSON) {
+      const obj = JSON.parse(import.meta.env.VITE_CAMERA_BINDINGS_JSON)
+      return obj && typeof obj === 'object' ? obj : defaultBindings()
+    }
+  } catch (e) {}
+  return defaultBindings()
+}
+
 export function buildTestVideoUrl (file, base = VIDEO_BASE_PATH) {
   return `${base}${file}`
 }
-export function getTestVideoList (base = VIDEO_BASE_PATH) {
-  return TEST_VIDEO_FILES.map(f => buildTestVideoUrl(f, base))
+
+/** 返回按相机ID升序的绑定槽位 [{cameraId, file, src}] */
+export function getCameraSlots () {
+  const map = loadBindings()
+  return Object.keys(map)
+    .map(k => Number(k))
+    .sort((a, b) => a - b)
+    .map(id => ({ cameraId: id, file: map[id], src: buildTestVideoUrl(map[id]) }))
 }
 
-/* ---------------------- 四格绑定配置（前端可调） ---------------------- */
-/**
- * 绑定示例：每个单元绑定一个摄像头 ID 和一个测试视频文件名。
- * 如需改绑定，只改这里的 cameraId/file 即可（或通过环境变量下发 JSON）。
- */
-export const DEFAULT_CAMERA_SLOTS = [
-  { cameraId: 5, file: 'helmet_vest.mp4' },
-  { cameraId: 6, file: 'all.mp4' },
-  { cameraId: 7, file: 'fire_smoke.mp4' },
-  { cameraId: 8, file: 'person_vehicle.mp4' }
-]
+/** 获取绑定到指定相机ID的视频URL；未绑定则返回空字符串 */
+export function getBoundVideoUrl (cameraId) {
+  const map = loadBindings()
+  const file = map?.[cameraId]
+  return file ? buildTestVideoUrl(file) : ''
+}
 
-// 如果配置了 VITE_CAMERA_SLOTS_JSON（如：[{"cameraId":5,"file":"helmet_vest.mp4"}, ...]），则覆盖默认
-export function getCameraSlots () {
-  let fromEnv = []
-  try {
-    if (import.meta.env.VITE_CAMERA_SLOTS_JSON) {
-      fromEnv = JSON.parse(import.meta.env.VITE_CAMERA_SLOTS_JSON)
-    }
-  } catch (e) {}
-  const slots = (fromEnv?.length ? fromEnv : DEFAULT_CAMERA_SLOTS)
-  return slots.map(s => ({ ...s, src: buildTestVideoUrl(s.file) }))
+/** 被绑定的视频相机ID数组（升序） */
+export function getBoundCameraIds () {
+  const map = loadBindings()
+  return Object.keys(map).map(Number).sort((a, b) => a - b)
 }

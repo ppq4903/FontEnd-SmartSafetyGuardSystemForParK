@@ -1,43 +1,52 @@
 <template>
   <div class="home">
-    <!-- 顶部未处理告警 -->
-    <el-card class="alarm-bar" shadow="never" :body-style="{padding:'12px 16px'}">
-      <div class="alarm-bar__head">
-        <div class="left">
-          <span class="badge">未处理告警（{{ pendingTotal }} 条）</span>
-        </div>
-        <el-button type="primary" link @click="$router.push('/alarm')">查看全部</el-button>
-      </div>
-
-      <div class="alarm-list">
-        <template v-if="alarms.length">
-          <div class="alarm-item" v-for="a in alarms" :key="a.alarm_id">
-            <el-tag :type="statusTagType(a.alarm_status)" size="small" effect="dark" round>
-              {{ alarmStatusText(a.alarm_status) }}
-            </el-tag>
-            <span>【{{ alarmTypeText(a.alarm_type) }}】</span>
-            <span class="meta">摄像头：{{ a.camera_name || a.camera_id }}</span>
-            <span class="meta">时间：{{ formatTime(a.alarm_time) }}</span>
-            <el-link v-if="a.snapshot_url" type="primary" :href="firstShot(a.snapshot_url)" target="_blank">
-              查看截图
-            </el-link>
+    <!-- 上半部分并列布局 -->
+    <div class="top-section">
+      <!-- 未处理告警 -->
+      <el-card class="alarm-bar" shadow="never" :body-style="{padding:'12px 16px'}">
+        <div class="alarm-bar__head">
+          <div class="left">
+            <span class="badge">未处理告警（{{ pendingTotal }} 条）</span>
           </div>
-        </template>
-        <div v-else class="empty">暂无未处理告警</div>
-      </div>
-    </el-card>
+          <el-button type="primary" link @click="$router.push('/alarm')">查看全部</el-button>
+        </div>
 
-    <div class="spacer"></div>
-    <!-- 快捷入口 -->
-    <el-card shadow="never">
-      <div class="card-head"><el-icon><Compass /></el-icon> 快捷入口</div>
-      <div class="spacer"></div>
-      <div class="quick-entry">
-        <el-button type="primary" @click="$router.push('/alarm')">告警中心</el-button>
-        <el-button @click="$router.push('/sys')">摄像头管理</el-button>
-        <el-button @click="exportReport">导出报表</el-button>
-      </div>
-    </el-card>
+        <div class="alarm-list">
+          <template v-if="alarms.length">
+            <div class="alarm-item" v-for="a in alarms" :key="a.alarm_id">
+              <div class="alarm-content">
+                <el-tag :type="statusTagType(a.alarm_status)" size="small" effect="dark" round>
+                  {{ alarmStatusText(a.alarm_status) }}
+                </el-tag>
+                <span>【{{ alarmTypeText(a.alarm_type) }}】</span>
+                <span class="meta">摄像头：{{ a.camera_name || a.camera_id }}</span>
+                <span class="meta">时间：{{ formatTime(a.alarm_time) }}</span>
+              </div>
+              <el-link v-if="a.snapshot_url" type="primary" :href="firstShot(a.snapshot_url)" target="_blank">
+                查看截图
+              </el-link>
+            </div>
+          </template>
+          <div v-else class="empty">暂无未处理告警</div>
+        </div>
+      </el-card>
+
+      <!-- 快捷入口 -->
+      <el-card shadow="never">
+        <div class="card-head"><el-icon><Compass /></el-icon> 快捷操作</div>
+        <div class="spacer"></div>
+        <div class="quick-entry">
+          <div class="button-row">
+            <el-button type="primary" @click="$router.push('/alarm')">告警中心</el-button>
+            <el-button @click="$router.push('/monitor')">实时监控</el-button>
+          </div>
+          <div class="button-row">
+            <el-button @click="$router.push('/sys')">摄像头管理</el-button>
+            <el-button @click="exportReport">导出报表</el-button>
+          </div>
+        </div>
+      </el-card>
+    </div>
     <div class="spacer"></div>
     <!-- 网格区域 -->
     <div class="grid">
@@ -352,13 +361,20 @@ onMounted(loadData)
 
 <style scoped>
 .home{display:flex;flex-direction:column;gap:12px}
+.top-section{display:flex;gap:12px}
 
 /* 顶部告警条 */
 .alarm-bar__head{display:flex;justify-content:space-between;align-items:center}
 .badge{display:inline-block;background:#fef0f0;color:#f56c6c;border-radius:2px;padding:2px 8px}
 .alarm-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .alarm-item{display:flex;align-items:center;gap:8px}
+.alarm-content{display:flex;align-items:center;gap:8px;flex:1;flex-wrap:nowrap}
+.alarm-content > span:first-of-type{flex-shrink:0}
+.alarm-content > span.meta:first-of-type{margin-left:0;flex-shrink:0;min-width:180px}
+.alarm-content > span.meta:last-of-type{margin-left:0;flex-shrink:0}
 .alarm-item .meta{color:#909399}
+.alarm-bar{flex:1;max-width:70%}
+.top-section > .el-card:last-child{flex:1;max-width:30%}
 
 /* 间隔 */
 .spacer{height:8px}
@@ -384,5 +400,7 @@ onMounted(loadData)
 .cam-status .total { text-align:right; color:#909399 }
 
 /* 快捷入口 */
-.quick-entry{display:flex;gap:16px}
+.quick-entry{display:flex;flex-direction:column;gap:12px}
+.button-row{display:flex;gap:16px}
+.button-row .el-button{flex:1}
 </style>
