@@ -39,7 +39,7 @@ export const CAMERA_STATUS_OPTIONS = Object.entries(CAMERA_STATUS_MAP).map(
 )
 
 // 仅允许：rtsp://IP:端口/流地址
-export const RTSP_REGEX = /^rtsp:\/\/\d{1,3}(\.\d{1,3}){3}:\d+\/.+$/
+export const RTSP_REGEX = 
 
 // ---------- 查询/分页参数归一 ----------
 const normalizePageParams = (params = {}) => {
