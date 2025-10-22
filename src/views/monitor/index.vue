@@ -416,91 +416,620 @@ const cellState = reactive({})          // { [cameraId]: { result, alarm, time, 
 const alarmsByCamera = reactive({})     // { [cameraId]: [{id,type,time,snapshot,level}] }
 const alarmTypeText = ['安全规范', '区域入侵', '火警']
 let ws
+let heartbeatInterval
+let reconnectTimer
+let wsConnectionState = false
+
 function connectAlarmWS () {
-  const url = import.meta.env.VITE_WS_ALARM_URL || 'ws://localhost:8000/ws/alarms'
-  ws = new WebSocket(url)
-  ws.onmessage = (ev) => {
-    try {
-      const msg = JSON.parse(ev.data)
-      // 调试日志，记录接收到的WebSocket消息
-      console.log('收到监控消息:', msg);
-      const cid = msg.camera_id
-      if (!cellState[cid]) cellState[cid] = {}
-      // 处理告警数据
-      const alarmType = msg.alarm_type !== undefined ? msg.alarm_type : '无';
+  // 确保在重新连接前清理旧连接
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  
+  // 清除之前的定时器
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  
+  // 根据当前环境构建正确的WebSocket URL
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  // 尝试使用环境变量，如果没有则构建默认URL
+  const url = import.meta.env.VITE_WS_ALARM_URL || `${protocol}//${host}/ws/safety/alarm`;
+  
+  console.log('尝试连接WebSocket:', url);
+  
+  try {
+    ws = new WebSocket(url);
+    wsConnectionState = false;
+    
+    ws.onopen = () => {
+      console.log('告警WebSocket连接已建立');
+      wsConnectionState = true;
       
-      // 只有在有实际告警时才添加到告警记录
-      if (alarmType !== '无' && alarmType !== 3) {
-        // 添加到告警记录
-        if (!alarmsByCamera[cid]) alarmsByCamera[cid] = [];
-        
-        // 使用alarmType作为告警类型文本
-        const typeText = alarmTypeText[alarmType] || '未知告警';
-        
-        alarmsByCamera[cid].unshift({
-          id: `${cid}-${Date.now()}`,
-          type: typeText,
-          time: new Date().toLocaleString('zh-CN'),
-          level: 'danger',
-          snapshot: msg.snapshot || null
-        });
-        
-        // 限制告警记录数量
-        if (alarmsByCamera[cid].length > 50) alarmsByCamera[cid].length = 50;
+      // 发送订阅消息，确保接收所有摄像头的告警
+      if (cameraList.value.length > 0) {
+        const cameraIds = cameraList.value.map(cam => cam.camera_id);
+        sendSubscribeMessage(cameraIds);
       }
       
-      // 更新cellState状态
-      cellState[cid].result = msg.result || msg.detection_result || '正常';
-      cellState[cid].alarm = alarmType !== '无' && alarmType !== 3 ? alarmTypeText[alarmType] || '未知告警' : '无';
-      cellState[cid].time = new Date().toLocaleString('zh-CN');
-      
-      // 如果有快照，添加快照
-      if (msg.snapshot) cellState[cid].snapshot = msg.snapshot
-      
-      // 如果有检测详情，添加详情
-      if (msg.detections && Array.isArray(msg.detections)) {
-        cellState[cid].detections = msg.detections;
+      // 启动心跳检测
+      startHeartbeat();
+    };
+    
+    ws.onmessage = (ev) => {
+      try {
+        // 记录接收到的原始消息
+        console.log('收到WebSocket消息:', ev.data);
+        
+        const msg = JSON.parse(ev.data);
+        
+        // 处理心跳响应
+        if (msg.type === 'pong' || msg.type === 'heartbeat_response') {
+          console.log('收到心跳响应');
+          return;
+        }
+        
+        // 处理告警和检测结果
+        processAlarmMessage(msg);
+      } catch (e) {
+        console.error('解析WebSocket消息失败', e);
+        console.error('原始消息:', ev.data);
       }
-    } catch (e) {
-      console.error('解析告警消息失败', e)
+    };
+    
+    ws.onerror = (e) => {
+      console.error('WebSocket连接错误', e);
+      wsConnectionState = false;
+    };
+    
+    ws.onclose = (event) => {
+      console.log('WebSocket连接已关闭:', event.code, event.reason);
+      wsConnectionState = false;
+      
+      // 清除心跳定时器
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+      }
+      
+      // 实现带指数退避的重连策略
+      scheduleReconnect();
+    };
+  } catch (error) {
+    console.error('创建WebSocket连接失败:', error);
+    wsConnectionState = false;
+    scheduleReconnect();
+  }
+}
+
+// 发送订阅消息
+function sendSubscribeMessage(cameraIds) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const subscribeMsg = {
+      type: 'subscribe',
+      data: { camera_ids: cameraIds }
+    };
+    ws.send(JSON.stringify(subscribeMsg));
+    console.log('发送摄像头订阅消息:', cameraIds);
+  }
+}
+
+// 启动心跳检测
+function startHeartbeat() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+  }
+  
+  heartbeatInterval = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'ping' }));
+        console.log('发送心跳消息');
+      } catch (error) {
+        console.error('发送心跳消息失败:', error);
+        // 心跳发送失败，触发重连
+        if (ws) {
+          ws.close();
+        }
+      }
+    }
+  }, 20000); // 每20秒发送一次心跳，更频繁以确保连接活跃
+}
+
+// 安排重连
+let reconnectAttempts = 0;
+function scheduleReconnect() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+  }
+  
+  // 指数退避重连策略
+  reconnectAttempts++;
+  const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts - 1));
+  
+  console.log(`将在 ${delay}ms 后进行第 ${reconnectAttempts} 次重连`);
+  
+  reconnectTimer = setTimeout(() => {
+    connectAlarmWS();
+  }, delay);
+}
+
+// 处理告警消息
+function processAlarmMessage(msg) {
+  // 支持多种消息格式，确保兼容性
+  const cid = msg.camera_id || msg.cameraId || msg.id;
+  
+  // 确保camera_id存在
+  if (!cid) {
+    console.warn('接收到的消息缺少camera_id字段:', msg);
+    return;
+  }
+  
+  // 确保cellState[cid]存在
+  if (!cellState[cid]) {
+    cellState[cid] = {
+      result: '正常',
+      alarm: '无',
+      time: '',
+      snapshot: null,
+      detections: [],
+      lastUpdate: Date.now(),
+      analysisStatus: 'unknown'
+    };
+  }
+  
+  const currentTime = new Date().toLocaleString('zh-CN');
+  const previousAlarm = cellState[cid].alarm;
+  const previousResult = cellState[cid].result;
+  
+  // 更新最后更新时间
+  cellState[cid].lastUpdate = Date.now();
+  cellState[cid].time = currentTime;
+  
+  // 更全面地处理检测结果 - 支持多种消息格式
+  let hasAbnormal = false;
+  let detectionObjects = [];
+  
+  // 1. 处理detections字段
+  if (msg.detections && Array.isArray(msg.detections) && msg.detections.length > 0) {
+    detectionObjects = msg.detections;
+    hasAbnormal = msg.detections.some(det => {
+      const isAbnormal = det.class && det.class.toLowerCase() !== 'normal';
+      const hasConfidence = det.confidence !== undefined && det.confidence > 0.5;
+      return isAbnormal && hasConfidence;
+    });
+  }
+  
+  // 2. 处理model_result中的detections
+  if (msg.model_result && msg.model_result.detections && Array.isArray(msg.model_result.detections)) {
+    detectionObjects = msg.model_result.detections;
+    hasAbnormal = msg.model_result.detections.some(det => {
+      const isAbnormal = det.class && det.class.toLowerCase() !== 'normal';
+      const hasConfidence = det.confidence !== undefined && det.confidence > 0.5;
+      return isAbnormal && hasConfidence;
+    });
+  }
+  
+  // 3. 处理直接的结果字段
+  const directResult = msg.result || msg.detection_result || msg.analysis_result;
+  
+  // 确定最终结果
+  let finalResult = '正常';
+  if (directResult === '异常' || hasAbnormal) {
+    finalResult = '异常';
+  } else if (directResult) {
+    finalResult = directResult;
+  }
+  
+  // 更新检测结果
+  cellState[cid].result = finalResult;
+  
+  // 更新检测详情
+  if (detectionObjects.length > 0) {
+    cellState[cid].detections = detectionObjects;
+  }
+  
+  // 处理快照信息
+  if (msg.snapshot) {
+    cellState[cid].snapshot = msg.snapshot;
+  }
+  
+  // 处理告警类型和状态
+  let alarmType = '无';
+  let alarmLevel = 'danger';
+  
+  // 检查多种可能的告警字段
+  const possibleAlarmTypes = [
+    msg.alarm_type, 
+    msg.alarmType, 
+    msg.type, // 有时候消息类型直接表示告警类型
+    msg.alarm_level, 
+    msg.alarm_level_text
+  ];
+  
+  for (const field of possibleAlarmTypes) {
+    if (field !== undefined && field !== null && field !== '无' && field !== '') {
+      alarmType = field;
+      break;
     }
   }
-  ws.onerror = (e) => console.error('告警WS错误', e)
-  ws.onclose = () => {
-    console.log('告警WS已关闭，稍后重连')
-    setTimeout(connectAlarmWS, 5000)
+  
+  // 检查显式的告警标志
+  if (msg.is_alarm === true || msg.has_alarm === true || msg.isAlarm === true) {
+    alarmType = alarmType === '无' ? '检测到异常' : alarmType;
+  }
+  
+  // 标准化告警类型文本
+  if (alarmType !== '无') {
+    const typeNum = typeof alarmType === 'string' ? parseInt(alarmType) : alarmType;
+    const typeText = alarmTypeText[typeNum] || alarmType.toString() || '未知告警';
+    cellState[cid].alarm = typeText;
+    
+    // 初始化告警记录数组
+    if (!alarmsByCamera[cid]) {
+      alarmsByCamera[cid] = [];
+    }
+    
+    // 为每条新告警创建唯一记录，不再检查重复
+    // 这确保每次告警都会被记录，解决告警记录不更新的问题
+    const newAlarm = {
+      id: `${cid}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: typeText,
+      time: currentTime,
+      level: alarmLevel,
+      snapshot: msg.snapshot || null,
+      alarm_id: msg.alarm_id || msg.id || null,
+      duration: msg.duration || null,
+      details: msg.details || null,
+      raw_data: { ...msg },
+      end_time: null // 告警结束时间
+    };
+    
+    // 添加到告警列表开头
+    alarmsByCamera[cid].unshift(newAlarm);
+    
+    // 限制告警记录数量，但保留更多记录以便查看历史
+    if (alarmsByCamera[cid].length > 50) {
+      alarmsByCamera[cid] = alarmsByCamera[cid].slice(0, 50);
+    }
+    
+    console.log(`摄像头 ${cid} 新增告警:`, newAlarm);
+  } else if (previousAlarm !== '无') {
+    // 告警状态从有变为无，更新最近告警的结束时间
+    if (alarmsByCamera[cid] && alarmsByCamera[cid].length > 0) {
+      const lastAlarm = alarmsByCamera[cid][0];
+      if (!lastAlarm.end_time) {
+        lastAlarm.end_time = currentTime;
+        lastAlarm.level = 'success';
+        console.log(`摄像头 ${cid} 告警结束:`, lastAlarm.type);
+      }
+    }
+    
+    // 更新为无告警状态
+    cellState[cid].alarm = '无';
+  }
+  
+  // 主动刷新当前选中摄像头的数据显示
+  // 这确保UI能及时反映最新的检测结果和告警状态
+  if (layoutKey.value === '1x1' && activeSingle.value && activeSingle.value.camera_id === cid) {
+    // 触发视图更新
+    console.log(`刷新当前选中摄像头 ${cid} 的显示数据`);
+    // 使用Vue的响应式机制确保视图更新
+    nextTick(() => {
+      // 这里不需要特殊操作，Vue会自动更新响应式数据
+    });
+  }
+  
+  // 记录状态变化
+  if (previousResult !== finalResult || previousAlarm !== cellState[cid].alarm) {
+    console.log(`摄像头 ${cid} 状态变化: 结果从 ${previousResult} 变为 ${finalResult}, 告警从 ${previousAlarm} 变为 ${cellState[cid].alarm}`);
   }
 }
 
 /* ======= 后端启停 ======= */
-async function handleStart (cameraId) { try { await startAnalysis(cameraId); ElMessage.success(`摄像头 ${cameraId} 已发送启动指令`) } catch { ElMessage.error('启动失败') } }
-async function handleStop (cameraId) { try { await stopAnalysis(cameraId); ElMessage.success(`摄像头 ${cameraId} 已发送停止指令`) } catch { ElMessage.error('停止失败') } }
-async function batchStart () { for (const id of selectedCameraIds.value) await handleStart(id) }
-async function batchStop () { for (const id of selectedCameraIds.value) await handleStop(id) }
-async function startBoundCameras () {
-  for (const id of getBoundCameraIds()) await handleStart(id)
-  ElMessage.success('已发送启动指令（四路绑定）')
+async function handleStart (cameraId) {
+  try {
+    console.log(`尝试启动摄像头 ${cameraId} 的分析`);
+    
+    // 发送启动指令前先重置该摄像头的状态
+    if (!cellState[cameraId]) {
+      cellState[cameraId] = {};
+    }
+    
+    cellState[cameraId].result = '初始化中...';
+    cellState[cameraId].alarm = '无';
+    cellState[cameraId].detections = [];
+    cellState[cameraId].lastUpdate = Date.now();
+    cellState[cameraId].analysisStatus = 'starting';
+    cellState[cameraId].time = new Date().toLocaleString('zh-CN');
+    
+    // 调用后端API启动分析
+    const result = await startAnalysis(cameraId);
+    console.log(`启动摄像头 ${cameraId} 成功:`, result);
+    
+    ElMessage.success(`摄像头 ${cameraId} 已发送启动指令`);
+    
+    // 更新分析状态
+    cellState[cameraId].analysisStatus = 'running';
+    
+    // 确保WebSocket订阅此摄像头
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      sendSubscribeMessage([cameraId]);
+    }
+    
+    // 设置一个状态更新定时器，确保用户能看到变化
+    setTimeout(() => {
+      if (cellState[cameraId] && cellState[cameraId].result === '初始化中...') {
+        cellState[cameraId].result = '分析中';
+        cellState[cameraId].time = new Date().toLocaleString('zh-CN');
+        console.log(`摄像头 ${cameraId} 进入分析中状态`);
+      }
+    }, 1000);
+    
+    // 主动向用户提示启动成功
+    if (layoutKey.value === '1x1' && activeSingle.value && activeSingle.value.camera_id === cameraId) {
+      // 强制刷新当前选中摄像头的显示
+      nextTick(() => {
+        console.log(`刷新当前选中摄像头 ${cameraId} 的显示`);
+      });
+    }
+  } catch (error) {
+    console.error('启动分析失败:', error);
+    
+    // 更新错误状态
+    if (cellState[cameraId]) {
+      cellState[cameraId].result = '启动失败';
+      cellState[cameraId].analysisStatus = 'error';
+      cellState[cameraId].lastError = error.message || '未知错误';
+      cellState[cameraId].time = new Date().toLocaleString('zh-CN');
+    }
+    
+    ElMessage.error(`启动失败: ${error.message || '未知错误'}`);
+  }
 }
 
-// 修复onMounted逻辑，确保正确初始化
+async function handleStop (cameraId) {
+  try {
+    console.log(`尝试停止摄像头 ${cameraId} 的分析`);
+    
+    // 更新状态为停止中
+    if (cellState[cameraId]) {
+      cellState[cameraId].analysisStatus = 'stopping';
+      cellState[cameraId].time = new Date().toLocaleString('zh-CN');
+    }
+    
+    // 调用后端API停止分析
+    const result = await stopAnalysis(cameraId);
+    console.log(`停止摄像头 ${cameraId} 成功:`, result);
+    
+    ElMessage.success(`摄像头 ${cameraId} 已发送停止指令`);
+    
+    // 立即更新状态为已停止
+    if (cellState[cameraId]) {
+      cellState[cameraId].result = '已停止';
+      cellState[cameraId].alarm = '无';
+      cellState[cameraId].detections = [];
+      cellState[cameraId].analysisStatus = 'stopped';
+      cellState[cameraId].time = new Date().toLocaleString('zh-CN');
+    }
+    
+    // 清除该摄像头的告警状态
+    if (alarmsByCamera[cameraId] && alarmsByCamera[cameraId].length > 0) {
+      const lastAlarm = alarmsByCamera[cameraId][0];
+      if (!lastAlarm.end_time) {
+        lastAlarm.end_time = new Date().toLocaleString('zh-CN');
+        lastAlarm.level = 'success';
+      }
+    }
+  } catch (error) {
+    console.error('停止分析失败:', error);
+    
+    // 更新错误状态
+    if (cellState[cameraId]) {
+      cellState[cameraId].analysisStatus = 'error';
+      cellState[cameraId].lastError = error.message || '停止失败';
+      cellState[cameraId].time = new Date().toLocaleString('zh-CN');
+    }
+    
+    ElMessage.error(`停止失败: ${error.message || '未知错误'}`);
+  }
+}
+
+// 批量启动优化：使用Promise.all并行处理
+async function batchStart () {
+  if (selectedCameraIds.value.length === 0) {
+    ElMessage.warning('请先选择摄像头');
+    return;
+  }
+  
+  console.log(`开始批量启动 ${selectedCameraIds.value.length} 个摄像头`);
+  
+  // 使用Promise.allSettled并行处理所有请求，避免一个失败影响全部
+  const promises = selectedCameraIds.value.map(id => handleStart(id).catch(err => {
+    console.error(`摄像头 ${id} 启动失败:`, err);
+    return { id, success: false, error: err };
+  }));
+  
+  await Promise.allSettled(promises);
+  ElMessage.success(`批量启动完成，已发送 ${selectedCameraIds.value.length} 个摄像头的启动指令`);
+  
+  // 确保WebSocket订阅所有启动的摄像头
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    sendSubscribeMessage(selectedCameraIds.value);
+  }
+}
+
+// 批量停止优化
+async function batchStop () {
+  if (selectedCameraIds.value.length === 0) {
+    ElMessage.warning('请先选择摄像头');
+    return;
+  }
+  
+  console.log(`开始批量停止 ${selectedCameraIds.value.length} 个摄像头`);
+  
+  const promises = selectedCameraIds.value.map(id => handleStop(id).catch(err => {
+    console.error(`摄像头 ${id} 停止失败:`, err);
+    return { id, success: false, error: err };
+  }));
+  
+  await Promise.allSettled(promises);
+  ElMessage.success(`批量停止完成，已发送 ${selectedCameraIds.value.length} 个摄像头的停止指令`);
+}
+
+async function startBoundCameras () {
+  const boundIds = getBoundCameraIds();
+  console.log(`启动绑定的摄像头:`, boundIds);
+  
+  for (const id of boundIds) {
+    await handleStart(id);
+  }
+  
+  ElMessage.success('已发送启动指令（四路绑定）');
+  
+  // 确保WebSocket订阅所有启动的摄像头
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    sendSubscribeMessage(boundIds);
+  }
+}
+
+// 添加一个函数，用于刷新当前选中摄像头的数据显示
+function refreshActiveCameraDisplay() {
+  if (layoutKey.value === '1x1' && activeSingle.value) {
+    const cameraId = activeSingle.value.camera_id;
+    console.log(`刷新摄像头 ${cameraId} 的显示数据`);
+    
+    // 这将触发Vue的响应式更新
+    // 强制更新告警列表和检测结果
+    if (alarmsByCamera[cameraId]) {
+      // 重新排序或克隆数组以触发更新
+      alarmsByCamera[cameraId] = [...alarmsByCamera[cameraId]];
+    }
+    
+    if (cellState[cameraId]) {
+      // 更新时间戳以确保视图更新
+      cellState[cameraId].time = new Date().toLocaleString('zh-CN');
+      // 触发detections数组的更新
+      if (cellState[cameraId].detections) {
+        cellState[cameraId].detections = [...cellState[cameraId].detections];
+      }
+    }
+  }
+}
+
+// 增强初始化逻辑
 onMounted(async () => {
+  console.log('监控页面开始初始化');
+  
+  // 加载摄像头列表
   await loadCameras();
+  
   // 先设置布局，再初始化播放器
   if (layoutKey.value === '1x1') {
     nextTick(playSingle);
   } else {
     nextTick(initPlayers);
   }
-  connectAlarmWS();
+  
+  // 延迟连接WebSocket，确保页面初始化完成
+  setTimeout(() => {
+    connectAlarmWS();
+  }, 1000);
+  
+  // 添加WebSocket连接状态监控
+  const wsStatusCheckInterval = setInterval(() => {
+    if (!wsConnectionState && ws && ws.readyState !== WebSocket.CONNECTING) {
+      console.warn('WebSocket连接断开，尝试重新连接');
+      connectAlarmWS();
+    }
+  }, 15000); // 每15秒检查一次连接状态
+  
+  // 添加摄像头状态检查定时器
+  const cameraStatusCheckInterval = setInterval(() => {
+    const now = Date.now();
+    
+    // 检查所有摄像头状态
+    Object.keys(cellState).forEach(cameraId => {
+      const state = cellState[cameraId];
+      
+      // 如果摄像头处于分析中状态但长时间未更新，可能有问题
+      if (state.analysisStatus === 'running' && 
+          state.lastUpdate && 
+          (now - state.lastUpdate > 2 * 60 * 1000)) {
+        
+        console.warn(`摄像头 ${cameraId} 分析中但2分钟未更新数据`);
+        
+        // 对于当前选中的摄像头，主动刷新显示
+        if (layoutKey.value === '1x1' && activeSingle.value && activeSingle.value.camera_id === cameraId) {
+          refreshActiveCameraDisplay();
+        }
+      }
+    });
+    
+    // 主动刷新当前选中摄像头的显示，确保UI及时更新
+    refreshActiveCameraDisplay();
+  }, 10000); // 每10秒检查一次并刷新显示
+  
+  // 清理定时器
+  onBeforeUnmount(() => {
+    clearInterval(wsStatusCheckInterval);
+    clearInterval(cameraStatusCheckInterval);
+    
+    // 清理WebSocket相关资源
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+    }
+    
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+    }
+    
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+  });
 })
 
+// 监听布局变化
 watch(layoutKey, (v) => {
-  if (v === '1x1') nextTick(playSingle)
-  else nextTick(initPlayers)
-})
+  console.log('布局变化:', v);
+  
+  // 重置分页
+  if (v === '1x1') {
+    singlePage.value = 0;
+    nextTick(() => {
+      playSingle();
+      // 布局切换到1x1时，确保告警记录正确显示
+      if (activeSingle.value) {
+        const cameraId = activeSingle.value.camera_id;
+        console.log(`切换到1x1模式，显示摄像头 ${cameraId} 的告警记录`);
+        // 强制刷新告警列表
+        if (alarmsByCamera[cameraId]) {
+          alarmsByCamera[cameraId] = [...alarmsByCamera[cameraId]];
+        }
+      }
+    });
+  } else {
+    wallPage.value = 0;
+    nextTick(initPlayers);
+  }
+});
+
+// 监听筛选后的摄像头变化
 watch(filteredCameras, () => {
   console.log('筛选后的摄像头变化，数量:', filteredCameras.value.length);
+  
   wallPage.value = 0;
+  
   if (layoutKey.value === '1x1') {
     singlePage.value = 0;
     nextTick(() => {
@@ -513,7 +1042,44 @@ watch(filteredCameras, () => {
       initPlayers();
     });
   }
-}, { deep: true })
+  
+  // 当摄像头列表变化时，重新订阅WebSocket
+  if (ws && ws.readyState === WebSocket.OPEN && filteredCameras.value.length > 0) {
+    const cameraIds = filteredCameras.value.map(cam => cam.camera_id);
+    sendSubscribeMessage(cameraIds);
+  }
+}, { deep: true });
+
+// 监听当前活动摄像头变化，确保告警记录正确更新
+watch(activeSingle, (newCamera, oldCamera) => {
+  if (newCamera) {
+    console.log(`当前活动摄像头变化为: ${newCamera.camera_name} (${newCamera.camera_id})`);
+    
+    // 确保该摄像头有告警记录数组
+    if (!alarmsByCamera[newCamera.camera_id]) {
+      alarmsByCamera[newCamera.camera_id] = [];
+    }
+    
+    // 强制刷新告警记录显示
+    nextTick(() => {
+      console.log(`刷新告警记录显示，当前记录数: ${alarmsByCamera[newCamera.camera_id].length}`);
+      // 重新排序或克隆数组以触发更新
+      alarmsByCamera[newCamera.camera_id] = [...alarmsByCamera[newCamera.camera_id]];
+    });
+  }
+});
+
+// 监听告警记录变化，用于调试
+watch(() => alarmsByCamera, (newAlarms) => {
+  // 仅在调试时启用，避免性能问题
+  // console.log('告警记录变化:', newAlarms);
+}, { deep: true });
+
+// 监听单元格状态变化
+watch(() => cellState, (newState) => {
+  // 仅在调试时启用，避免性能问题
+  // console.log('单元格状态变化:', newState);
+}, { deep: true });
 </script>
 
 <style scoped>

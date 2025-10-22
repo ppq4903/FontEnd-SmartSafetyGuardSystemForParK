@@ -288,24 +288,21 @@ function isToday(dateString) {
 
 // ========= 加载 =========
 async function loadData () {
-  // 1) 顶部未解决（含未处理/处理中）- 增加数量以便滚动查看
-  // 简化API调用参数，避免复杂参数格式
-  const r = await apiGetRecentUnresolved().catch(() => ({}))
-  const list1 = pickList(r?.data ?? r)
-  let unresolved = list1
-  if (!unresolved.length) {
-    const all = await apiGetAlarms().catch(() => ({}))
-    unresolved = pickList(all?.data ?? all)
-  }
+  // 1) 顶部未解决（含未处理/处理中）- 直接使用apiGetAlarms获取所有告警并筛选
+  // 添加分页参数以确保获取所有告警数据
+  const all = await apiGetAlarms({ page: 1, limit: 1000 }).catch(() => ({}))
+  let unresolved = pickList(all?.data ?? all)
+  
   // 过滤出未处理和处理中的告警
   unresolved = unresolved.filter(alarm => alarm.alarm_status === 0 || alarm.alarm_status === 2)
-  // 移除限制，显示所有未处理告警
+  
+  // 确保显示所有未处理告警
   alarms.value = unresolved
   pendingTotal.value = unresolved.length
 
   // 2) 获取所有告警记录用于筛选当日数据
-  // 简化API调用参数
-  const allAlarms = await apiGetAlarms().catch(() => ({}))
+  // 添加分页参数以获取所有告警数据
+  const allAlarms = await apiGetAlarms({ page: 1, limit: 1000 }).catch(() => ({}))
   const allAlarmRows = pickList(allAlarms?.data ?? allAlarms)
   
   // 筛选今日告警记录
@@ -329,8 +326,8 @@ async function loadData () {
     statObj = normalizeCameraStat(s?.data ?? s)
   } catch {}
   if (!statObj.online && !statObj.offline && !statObj.busy) {
-    // 简化API调用参数
-    const cams = await apiGetCameraInfos().catch(() => ({}))
+    // 添加分页参数以获取所有摄像头数据
+    const cams = await apiGetCameraInfos({ page: 1, limit: 1000 }).catch(() => ({}))
     const rows = pickList(cams?.data ?? cams)
     statObj = normalizeCameraStat(null, rows)
   }
@@ -398,7 +395,7 @@ onMounted(loadData)
 /* 顶部告警条 */
 .alarm-bar__head{display:flex;justify-content:space-between;align-items:center}
 .badge{display:inline-block;background:#fef0f0;color:#f56c6c;border-radius:2px;padding:2px 8px}
-.alarm-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:500px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#dcdfe6 #f0f2f5}.alarm-list::-webkit-scrollbar{width:8px}.alarm-list::-webkit-scrollbar-track{background:#f0f2f5;border-radius:4px}.alarm-list::-webkit-scrollbar-thumb{background:#dcdfe6;border-radius:4px}.alarm-list::-webkit-scrollbar-thumb:hover{background:#c0c4cc}
+.alarm-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#dcdfe6 #f0f2f5}.alarm-list::-webkit-scrollbar{width:6px}.alarm-list::-webkit-scrollbar-track{background:#f0f2f5}.alarm-list::-webkit-scrollbar-thumb{background:#dcdfe6}
 .alarm-item{display:flex;align-items:center;gap:8px}
 .alarm-content{display:flex;align-items:center;gap:8px;flex:1;flex-wrap:nowrap}
 .alarm-content > span:first-of-type{flex-shrink:0}
@@ -412,14 +409,14 @@ onMounted(loadData)
 .spacer{height:8px}
 
 /* 布局与卡片 */
-.grid{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:300px;gap:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.grid-item.number-card{height:150px}.grid-item:nth-child(3),.grid-item:nth-child(4){height:300px}
 .grid-item{height:100%}
 .card-head{display:flex;align-items:center;gap:8px;font-weight:600}
 .chart{height:240px}
 
 /* 数字卡片 */
-.number-card .number{font-size:16px}
-.number-card b{font-size:22px;margin:0 4px}
+.number-card .number{font-size:14px}
+.number-card b{font-size:18px;margin:0 4px}
 
 /* 摄像头状态卡片（纵向分布） */
 .cam-status { display:flex; flex-direction:column; gap:12px; padding:4px 12px 8px 0 }

@@ -1,5 +1,22 @@
 import request from '@/utils/request'
 
+// 添加WebSocket相关的工具函数，便于前端使用
+export const WS_UTILS = {
+  // 生成唯一的消息ID
+  generateMessageId: () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  
+  // 构建标准的WebSocket消息格式
+  buildMessage: (type, data = {}) => ({
+    type,
+    data,
+    id: WS_UTILS.generateMessageId(),
+    timestamp: Date.now()
+  }),
+  
+  // 检查WebSocket连接状态
+  isConnected: (ws) => ws && ws.readyState === WebSocket.OPEN
+};
+
 /**
  * 统一查询：返回 { rows, total }
  * 兼容后端可能的返回格式：数组 / {rows|list|items|data, total}
@@ -38,10 +55,51 @@ export function fetchFramePing (cameraId) {
 
 // 开启/关闭检测
 export function startAnalysis (cameraId) {
+  console.log(`发送启动分析请求到摄像头 ${cameraId}`);
   return request.get(`/safety_analysis/start/${cameraId}`)
+    .then(response => {
+      console.log(`摄像头 ${cameraId} 启动分析成功`, response.data);
+      // 确保返回完整的响应数据，便于前端处理
+      return {
+        success: true,
+        data: response.data,
+        cameraId: cameraId
+      };
+    })
+    .catch(error => {
+      console.error(`摄像头 ${cameraId} 启动分析失败`, error.response?.data || error.message || error);
+      // 包装错误信息，便于前端更好地展示
+      throw {
+        success: false,
+        cameraId: cameraId,
+        message: error.response?.data?.message || error.message || '启动分析失败',
+        originalError: error
+      };
+    });
 }
+
 export function stopAnalysis (cameraId) {
+  console.log(`发送停止分析请求到摄像头 ${cameraId}`);
   return request.get(`/safety_analysis/stop/${cameraId}`)
+    .then(response => {
+      console.log(`摄像头 ${cameraId} 停止分析成功`, response.data);
+      // 确保线程停止标志被正确设置
+      return {
+        success: true,
+        data: response.data,
+        cameraId: cameraId
+      };
+    })
+    .catch(error => {
+      console.error(`摄像头 ${cameraId} 停止分析失败`, error.response?.data || error.message || error);
+      // 包装错误信息，便于前端更好地展示
+      throw {
+        success: false,
+        cameraId: cameraId,
+        message: error.response?.data?.message || error.message || '停止分析失败',
+        originalError: error
+      };
+    });
 }
 
 // 单项 CRUD
@@ -116,15 +174,25 @@ export function getCameraSlots () {
 export function getBoundVideoUrl (cameraId) {
   const map = loadBindings()
   const file = map?.[cameraId]
-  if (!file) return ''
   
-  // 处理local:格式的视频路径，提取文件名并构建正确的URL
-  if (file.startsWith('local:')) {
-    const fileName = file.substring(6) // 移除'local:'前缀
-    return buildTestVideoUrl(fileName)
+  if (!file) {
+    console.log(`摄像头 ${cameraId} 未绑定视频源`);
+    return ''
   }
   
-  return buildTestVideoUrl(file)
+  // 处理local:格式的视频路径，提取文件名并构建正确的URL
+  let videoPath;
+  if (file.startsWith('local:')) {
+    const fileName = file.substring(6) // 移除'local:'前缀
+    videoPath = buildTestVideoUrl(fileName)
+  } else {
+    videoPath = buildTestVideoUrl(file)
+  }
+  
+  // 确保URL格式正确
+  const url = new URL(videoPath, window.location.origin).href;
+  console.log(`摄像头 ${cameraId} 绑定视频: ${url}`)
+  return url
 }
 
 /** 被绑定的视频相机ID数组（升序） */
