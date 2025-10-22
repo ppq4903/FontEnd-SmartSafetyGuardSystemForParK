@@ -23,6 +23,11 @@
       <el-form-item>
         <el-button type="primary" @click="onQuery">查询</el-button>
         <el-button @click="onReset">重置</el-button>
+        <el-popconfirm title="确认删除选中的告警记录？" @confirm="batchDelete">
+          <template #reference>
+            <el-button type="danger" :disabled="selection.length === 0">批量删除</el-button>
+          </template>
+        </el-popconfirm>
       </el-form-item>
     </el-form>
 
@@ -40,7 +45,7 @@
     <!-- 表格 -->
     <el-table :data="tableData" border stripe @selection-change="onSelectionChange">
       <el-table-column type="selection" width="50" />
-      <el-table-column type="index" label="序号" width="90" :index="(index) => index + 1" />
+      <el-table-column type="index" label="序号" width="90" :index="(index) => (currentPage - 1) * pageSize + index + 1" />
       <el-table-column prop="alarm_time" label="触发时间" min-width="160" />
       <el-table-column prop="park_area" label="园区区域" min-width="140" />
       <el-table-column prop="camera_name" label="摄像头名称" min-width="160" />
@@ -155,6 +160,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getAlarmsText, getAlarmsJson, deleteAlarms, createAlarmHandleRecord } from '@/api/alarm'
 
 /* 数据与分页 */
@@ -316,6 +322,21 @@ async function submitHandle() {
 async function delOne(row) {
   await deleteAlarms([row.alarm_id])
   fetchList()
+}
+
+/* 批量删除 */
+async function batchDelete() {
+  if (selection.value.length === 0) return
+  try {
+    const ids = selection.value.map(row => row.alarm_id)
+    await deleteAlarms(ids)
+    selection.value = [] // 清空选中状态
+    ElMessage.success(`成功删除 ${ids.length} 条告警记录`)
+    fetchList()
+  } catch (error) {
+    ElMessage.error('批量删除失败，请重试')
+    console.error('批量删除告警失败:', error)
+  }
 }
 
 onMounted(fetchList)

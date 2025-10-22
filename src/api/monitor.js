@@ -14,7 +14,10 @@ export const WS_UTILS = {
   }),
   
   // 检查WebSocket连接状态
-  isConnected: (ws) => ws && ws.readyState === WebSocket.OPEN
+  isConnected: (ws) => ws && ws.readyState === WebSocket.OPEN,
+  
+  // 后端WebSocket端点
+  getAlarmWebSocketUrl: () => import.meta.env.VITE_WS_ALARM_URL || 'ws://127.0.0.1:8089/api/v1/safety_analysis/ws'
 };
 
 /**

@@ -96,10 +96,10 @@
             <div class="cell-info">
               <div class="row1">
                 <span class="cam">{{ cell.camera.camera_name || ('摄像头' + cell.camera.camera_id) }}</span>
-                <span class="area">检测结果：<b>{{ (cellState[cell.camera.camera_id]?.result) || '正常' }}</b></span>
+                <span class="area">检测结果：<b>{{ cellState[cell.camera.camera_id]?.result || '-' }}</b></span>
               </div>
               <div class="row2">
-                <span>当前告警：{{ (cellState[cell.camera.camera_id]?.alarm) || '无' }}</span>
+                <span>当前告警：{{ cellState[cell.camera.camera_id]?.alarm || '无' }}</span>
                 <span v-if="cellState[cell.camera.camera_id]?.time">时间：{{ cellState[cell.camera.camera_id].time }}</span>
               </div>
               <!-- 显示详细检测信息 -->
@@ -140,8 +140,8 @@
 
         <div class="single-caption">
           <span>{{ activeSingle?.camera_name || ('摄像头' + (activeSingle?.camera_id ?? '')) }}</span>
-          <span>检测结果：<b>{{ (cellState[activeSingle?.camera_id]?.result) || '正常' }}</b></span>
-          <span>当前告警：{{ (cellState[activeSingle?.camera_id]?.alarm) || '无' }}</span>
+          <span>检测结果：<b>{{ cellState[activeSingle?.camera_id]?.result || '-' }}</b></span>
+          <span>当前告警：{{ cellState[activeSingle?.camera_id]?.alarm || '无' }}</span>
           <span v-if="cellState[activeSingle?.camera_id]?.time">时间：{{ cellState[activeSingle?.camera_id].time }}</span>
           <!-- 1×1模式下也显示检测详情 -->
           <div class="detections" v-if="cellState[activeSingle?.camera_id]?.detections && cellState[activeSingle?.camera_id].detections.length > 0">
@@ -438,11 +438,8 @@ function connectAlarmWS () {
     reconnectTimer = null;
   }
   
-  // 根据当前环境构建正确的WebSocket URL
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host;
-  // 尝试使用环境变量，如果没有则构建默认URL
-  const url = import.meta.env.VITE_WS_ALARM_URL || `${protocol}//${host}/ws/safety/alarm`;
+  // 使用后端提供的WebSocket URL
+  const url = import.meta.env.VITE_WS_ALARM_URL || 'ws://127.0.0.1:8089/api/v1/safety_analysis/ws';
   
   console.log('尝试连接WebSocket:', url);
   
@@ -621,27 +618,6 @@ function processAlarmMessage(msg) {
   // 3. 处理直接的结果字段
   const directResult = msg.result || msg.detection_result || msg.analysis_result;
   
-  // 确定最终结果
-  let finalResult = '正常';
-  if (directResult === '异常' || hasAbnormal) {
-    finalResult = '异常';
-  } else if (directResult) {
-    finalResult = directResult;
-  }
-  
-  // 更新检测结果
-  cellState[cid].result = finalResult;
-  
-  // 更新检测详情
-  if (detectionObjects.length > 0) {
-    cellState[cid].detections = detectionObjects;
-  }
-  
-  // 处理快照信息
-  if (msg.snapshot) {
-    cellState[cid].snapshot = msg.snapshot;
-  }
-  
   // 处理告警类型和状态
   let alarmType = '无';
   let alarmLevel = 'danger';
@@ -663,9 +639,34 @@ function processAlarmMessage(msg) {
   }
   
   // 检查显式的告警标志
-  if (msg.is_alarm === true || msg.has_alarm === true || msg.isAlarm === true) {
+  let hasAlarmFlag = msg.is_alarm === true || msg.has_alarm === true || msg.isAlarm === true;
+  if (hasAlarmFlag) {
     alarmType = alarmType === '无' ? '检测到异常' : alarmType;
   }
+  
+  // 确定最终结果
+  let finalResult = '正常';
+  if (directResult === '异常' || hasAbnormal || alarmType !== '无' || hasAlarmFlag) {
+    // 当有告警记录、告警标志或检测到异常时，结果应设为异常
+    finalResult = '异常';
+  } else if (directResult) {
+    finalResult = directResult;
+  }
+
+  // 更新检测结果
+  cellState[cid].result = finalResult;
+
+  // 更新检测详情
+  if (detectionObjects.length > 0) {
+    cellState[cid].detections = detectionObjects;
+  }
+
+  // 处理快照信息
+  if (msg.snapshot) {
+    cellState[cid].snapshot = msg.snapshot;
+  }
+  
+
   
   // 标准化告警类型文本
   if (alarmType !== '无') {
