@@ -1,71 +1,66 @@
-// src/api/alarm.js
+// 告警/处理记录/摄像头/用户 相关接口（不带 api/v1 前缀）
 import request from '@/utils/request'
 
-/**
- * 原有：获取告警列表（保留原始字符串，页面自行解析）
- * GET /alarms/?start_time&end_time&alarm_type&alarm_status&skip&limit
- */
-export function getAlarmsText(params) {
+// 1) 告警列表（分页参数可用于分段拉取；本页采用前端稳定分页，会循环把全部取完）
+export function getAlarms(params) {
+  // params: { alarm_type?, alarm_status?, skip=0, limit=200 }
   return request({
-    url: '/alarms/',
-    method: 'get',
-    params,
-    transformResponse: [(data) => data] // 保留为字符串
-  })
-}
-
-/**
- * ✅ 新增兜底：获取告警列表（让 axios 正常解析为对象）
- * 用于当某些环境下 getAlarmsText 返回 '{}' 或空串时的回退方案
- */
-export function getAlarmsJson(params) {
-  return request({
-    url: '/alarms/',
+    url: '/alarms',
     method: 'get',
     params
-    // 不设置 transformResponse，走默认 JSON 解析
   })
 }
 
-/** 批量删除 —— DELETE /alarms/{alarm_ids} */
+// 2) 批量删除告警
 export function deleteAlarms(ids) {
-  const idsStr = Array.isArray(ids) ? ids.join(',') : String(ids || '')
+  const idStr = Array.isArray(ids) ? ids.join(',') : String(ids)
   return request({
-    url: `/alarms/${idsStr}`,
+    url: `/alarms/${idStr}`,
     method: 'delete'
   })
 }
 
-/** 处理记录列表 —— GET /alarm_handle_records/{alarm_id} */
-export function getAlarmHandleRecords(alarmId) {
+// 3) 获取某条告警的处理记录列表
+export function getHandleRecords(alarmId) {
   return request({
     url: `/alarm_handle_records/${alarmId}`,
     method: 'get'
   })
 }
 
-/** 上传处理附件 —— POST /alarm_handle_records/upload_attachment */
-export function uploadHandleAttachment(payload) {
+// 4) 新增处理记录（派单 / 误报 / 已解决）
+//    避免 422：只传必要字段，非派单不传 handle_user_id；无附件不传 attachment_url
+export function createHandleRecord(data) {
+  return request({
+    url: '/alarm_handle_records',
+    method: 'post',
+    data
+  })
+}
+
+// 5) 上传附件（base64）
+export function uploadAttachment(data) {
+  // data: { file_content: base64(不含data:前缀), file_extension: 'jpg' }
   return request({
     url: '/alarm_handle_records/upload_attachment',
     method: 'post',
-    data: payload
+    data
   })
 }
 
-/** 创建处理记录 —— POST /alarm_handle_records/ */
-export function createAlarmHandleRecord(payload) {
+// 6) 取用户（例如只要操作员：user_role=2）
+export function getUsers(params = {}) {
   return request({
-    url: '/alarm_handle_records/',
-    method: 'post',
-    data: payload
+    url: '/users',
+    method: 'get',
+    params
   })
 }
 
-/** 根据 camera_id 获取摄像头信息 —— GET /cameraInfos/{camera_id} */
+// 7) 取摄像头信息
 export function getCameraInfo(cameraId) {
   return request({
-    url: `/cameraInfos/${cameraId}`,
+    url: `/camera_infos/${cameraId}`,
     method: 'get'
   })
 }

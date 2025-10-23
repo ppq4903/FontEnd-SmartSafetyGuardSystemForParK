@@ -28,10 +28,11 @@ request.interceptors.response.use(
     if(error.response.status===401){
       ElMessage.error("登录超时，请重新登录！");
       router.push('/login');// 停止当前页面显示，跳转到登录页面
-    }else{
-      ElMessage.error(`接口访问异常，Status：${error.response.status}`);
+    }else{{  
+      ElMessage.error(`接口访问异常gStatus：${error.response.status}`);
     }
     return Promise.reject(error)
+  }
   }
 )
 

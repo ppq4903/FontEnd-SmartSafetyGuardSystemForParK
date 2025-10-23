@@ -71,7 +71,8 @@
 
       <el-table-column label="分析模式" min-width="100">
         <template #default="{ row }">
-          <el-tag :type="analysisTagType(row.analysis_mode)" effect="light">{{ analysisLabel(row.analysis_mode) }}</el-tag>
+          <el-tag v-if="row.analysis_mode === 2" class="pink-tag" effect="light">{{ analysisLabel(row.analysis_mode) }}</el-tag>
+          <el-tag v-else :type="analysisTagType(row.analysis_mode)" effect="light">{{ analysisLabel(row.analysis_mode) }}</el-tag>
         </template>
       </el-table-column>
 
@@ -200,7 +201,8 @@ const ANALYSIS_MAP = { 0: '无', 1:'全部', 2: '安全规范', 3: '区域入侵
 const STATUS_MAP   = { 0: '离线', 1: '在线', 2: '忙碌（安全分析中）' }
 const analysisLabel = v => ANALYSIS_MAP[v] ?? v
 const statusLabel   = v => STATUS_MAP[v] ?? v
-const analysisTagType = v => ({ 0: 'info', 1: 'success', 2: 'warning', 3: 'danger' }[v] ?? 'info')
+const analysisTagType = v => ({ 0: 'info', 1: 'success', 3: 'warning', 4: 'danger' }[v] ?? 'info')
+  const isPinkTag = v => v === 2
 const statusTagType   = v => ({ 0: 'danger', 1: 'success', 2: 'warning' }[v] ?? 'info')
 
 onMounted(() => { loadData(true) })

@@ -44,7 +44,6 @@
 
         <!-- 操作按钮 -->
         <div class="btn-row">
-          <el-button size="small" type="primary" @click="startBoundCameras">启动四路绑定检测</el-button>
           <el-button size="small" type="success" :disabled="!selectedCameraIds.length" @click="batchStart">批量启动</el-button>
           <el-button size="small" type="warning" :disabled="!selectedCameraIds.length" @click="batchStop">批量停止</el-button>
         </div>
@@ -189,7 +188,7 @@
               <a v-if="a.snapshot" :href="a.snapshot" target="_blank">查看</a>
             </div>
           </div>
-          <div v-else class="empty">暂无告警</div>
+          <div v-else class="empty">暂无最新告警</div>
         </div>
       </el-card>
     </aside>
@@ -197,7 +196,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchCameraList,
@@ -208,6 +207,98 @@ import {
   buildTestVideoUrl,
   getBoundVideoUrl
 } from '@/api/monitor'
+
+/* ======= 状态暂存机制 ======= */
+const STORAGE_KEY = 'monitor_page_state'
+
+// 本地存储工具函数
+const storage = {
+  // 保存状态到本地存储
+  saveState(state) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      console.log('监控页面状态已保存:', state)
+    } catch (error) {
+      console.error('保存状态失败:', error)
+    }
+  },
+  
+  // 从本地存储恢复状态
+  loadState() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const state = JSON.parse(saved)
+        console.log('监控页面状态已恢复:', state)
+        return state
+      }
+    } catch (error) {
+      console.error('恢复状态失败:', error)
+    }
+    return null
+  },
+  
+  // 清除保存的状态
+  clearState() {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+      console.log('监控页面状态已清除')
+    } catch (error) {
+      console.error('清除状态失败:', error)
+    }
+  }
+}
+
+// 需要暂存的状态变量
+const stateToSave = () => ({
+  layoutKey: layoutKey.value,
+  regionId: regionId.value,
+  cameraIdInRegion: cameraIdInRegion.value,
+  wallPage: wallPage.value,
+  singlePage: singlePage.value,
+  selectedCameraIds: selectedCameraIds.value,
+  timestamp: Date.now()
+})
+
+// 恢复状态
+const restoreState = (savedState) => {
+  if (!savedState) return
+  
+  // 恢复布局设置
+  if (savedState.layoutKey && layoutMap[savedState.layoutKey]) {
+    layoutKey.value = savedState.layoutKey
+  }
+  
+  // 恢复筛选条件
+  if (savedState.regionId !== undefined) {
+    regionId.value = savedState.regionId
+  }
+  
+  if (savedState.cameraIdInRegion !== undefined) {
+    cameraIdInRegion.value = savedState.cameraIdInRegion
+  }
+  
+  // 恢复分页状态
+  if (savedState.wallPage !== undefined) {
+    wallPage.value = savedState.wallPage
+  }
+  
+  if (savedState.singlePage !== undefined) {
+    singlePage.value = savedState.singlePage
+  }
+  
+  // 恢复选中的摄像头
+  if (savedState.selectedCameraIds) {
+    selectedCameraIds.value = savedState.selectedCameraIds
+  }
+  
+  console.log('状态恢复完成')
+}
+
+// 自动保存状态
+const autoSaveState = () => {
+  storage.saveState(stateToSave())
+}
 
 /* ======= 映射：状态 / 模式 ======= */
 // 增加检测结果处理函数
@@ -252,13 +343,35 @@ watch(cameraIdInRegion, () => {
     wallPage.value = 0;
     nextTick(initPlayers);
   }
+  
+  // 自动保存状态
+  autoSaveState();
 })
 const selectedCameraIds = ref([])      // 批量启停
+
+// 监听选中的摄像头变化
+watch(selectedCameraIds, () => {
+  // 自动保存状态
+  autoSaveState();
+}, { deep: true });
 const regionOptions = computed(() => {
+  // 区域ID到显示名称的映射
+  const areaMapping = {
+    '1': 'A区',
+    '2': 'B区',
+    '3': 'C区'
+  }
+  
   const map = new Map()
   for (const c of cameraList.value) {
     const k = c.park_area_id ?? c.parkAreaId ?? c.area_id
-    const v = c.park_area_name ?? c.parkAreaName ?? `区域${k ?? '-'}`
+    // 首先尝试使用映射表中的名称，然后是摄像头的区域名称，最后是默认格式
+    let v
+    if (k && areaMapping[k.toString()]) {
+      v = areaMapping[k.toString()]
+    } else {
+      v = c.park_area_name ?? c.parkAreaName ?? `区域${k ?? '-'}`
+    }
     if (k !== undefined && !map.has(k)) map.set(k, v)
   }
   return [{ label: '全部园区', value: null }, ...Array.from(map, ([value, label]) => ({ value, label }))]
@@ -332,8 +445,8 @@ const wallCells = computed(() => {
   })
   return cells
 })
-function wallPrev () { wallPage.value = (wallPage.value - 1 + wallTotalPages.value) % wallTotalPages.value; nextTick(initPlayers) }
-function wallNext () { wallPage.value = (wallPage.value + 1) % wallTotalPages.value; nextTick(initPlayers) }
+function wallPrev () { wallPage.value = (wallPage.value - 1 + wallTotalPages.value) % wallTotalPages.value; nextTick(initPlayers); autoSaveState(); }
+function wallNext () { wallPage.value = (wallPage.value + 1) % wallTotalPages.value; nextTick(initPlayers); autoSaveState(); }
 
 const videoRefs = ref([])
 const setVideoRef = (el, i) => { videoRefs.value[i] = el }
@@ -405,10 +518,12 @@ function playSingle () {
 function prevSingle () { 
   singlePage.value = (singlePage.value - 1 + singleTotal.value) % singleTotal.value; 
   nextTick(playSingle);
+  autoSaveState();
 }
 function nextSingle () { 
   singlePage.value = (singlePage.value + 1) % singleTotal.value; 
   nextTick(playSingle);
+  autoSaveState();
 }
 
 /* ======= 告警推送（WS） ======= */
@@ -886,21 +1001,7 @@ async function batchStop () {
   ElMessage.success(`批量停止完成，已发送 ${selectedCameraIds.value.length} 个摄像头的停止指令`);
 }
 
-async function startBoundCameras () {
-  const boundIds = getBoundCameraIds();
-  console.log(`启动绑定的摄像头:`, boundIds);
-  
-  for (const id of boundIds) {
-    await handleStart(id);
-  }
-  
-  ElMessage.success('已发送启动指令（四路绑定）');
-  
-  // 确保WebSocket订阅所有启动的摄像头
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    sendSubscribeMessage(boundIds);
-  }
-}
+
 
 // 添加一个函数，用于刷新当前选中摄像头的数据显示
 function refreshActiveCameraDisplay() {
@@ -929,6 +1030,12 @@ function refreshActiveCameraDisplay() {
 // 增强初始化逻辑
 onMounted(async () => {
   console.log('监控页面开始初始化');
+  
+  // 恢复上次的状态
+  const savedState = storage.loadState()
+  if (savedState) {
+    restoreState(savedState)
+  }
   
   // 加载摄像头列表
   await loadCameras();
@@ -1004,6 +1111,9 @@ onMounted(async () => {
 watch(layoutKey, (v) => {
   console.log('布局变化:', v);
   
+  // 自动保存状态
+  autoSaveState();
+  
   // 重置分页
   if (v === '1x1') {
     singlePage.value = 0;
@@ -1029,6 +1139,12 @@ watch(layoutKey, (v) => {
 watch(filteredCameras, () => {
   console.log('筛选后的摄像头变化，数量:', filteredCameras.value.length);
   
+  // 当筛选结果只有一个摄像头时，自动切换到1x1布局
+  if (filteredCameras.value.length === 1) {
+    layoutKey.value = '1x1';
+    console.log('筛选结果只有一个摄像头，自动切换到1x1布局');
+  }
+  
   wallPage.value = 0;
   
   if (layoutKey.value === '1x1') {
@@ -1049,6 +1165,9 @@ watch(filteredCameras, () => {
     const cameraIds = filteredCameras.value.map(cam => cam.camera_id);
     sendSubscribeMessage(cameraIds);
   }
+  
+  // 自动保存状态
+  autoSaveState();
 }, { deep: true });
 
 // 监听当前活动摄像头变化，确保告警记录正确更新
@@ -1068,6 +1187,9 @@ watch(activeSingle, (newCamera, oldCamera) => {
       alarmsByCamera[newCamera.camera_id] = [...alarmsByCamera[newCamera.camera_id]];
     });
   }
+  
+  // 自动保存状态
+  autoSaveState();
 });
 
 // 监听告警记录变化，用于调试
