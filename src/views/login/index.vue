@@ -25,8 +25,12 @@ function switchMode(toRegister) {
 }
 
 function successGotoHome(token, fallbackName) {
-  if (token) localStorage.setItem('token', token)
-  localStorage.setItem('loginInfo', JSON.stringify({ name: fallbackName }))
+  if (token) {
+    // 存储token，后端会在请求时验证Bearer token
+    localStorage.setItem('token', token)
+    // 存储用户信息
+    localStorage.setItem('loginInfo', JSON.stringify({ name: fallbackName, token: token }))
+  }
   ElMessage.success('操作成功')
   router.push('/')
 }

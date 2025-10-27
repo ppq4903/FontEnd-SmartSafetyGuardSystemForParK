@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ElMessage } from 'element-plus'
 
 // 基础页面
 import LoginView from '@/views/login/index.vue'
@@ -28,20 +29,18 @@ const router = createRouter({
     // 登录独立路由
     { path: '/login', name: 'login', component: LoginView },
 
-    // 主框架
+    // 主框架 - 需要登录才能访问
     {
       path: '/',
       component: Layout,
       redirect: '/home',
+      meta: { requiresAuth: true }, // 整个主框架都需要认证
       children: [
         { path: 'home', name: 'home', component: HomeView, meta: { title: '首页' } },
 
         // 业务管理
-        { path: 'clazz', name: 'clazz', component: ClazzView, meta: { title: '班级管理' } },
-        { path: 'stu', name: 'stu', component: StuView, meta: { title: '学员管理' } },
-        { path: 'dept', name: 'dept', component: DeptView, meta: { title: '部门管理' } },
         { path: 'emp', name: 'emp', component: EmpView, meta: { title: '员工管理' } },
-        { path: 'area', name: 'area', component: AreaView, meta: { title: '园区管理' } }, // ★ 新增路由
+        { path: 'area', name: 'area', component: AreaView, meta: { title: '园区管理' } },
 
         // 报表/日志
         { path: 'empReport', name: 'empReport', component: EmpReportView, meta: { title: '员工统计' } },
@@ -55,9 +54,37 @@ const router = createRouter({
       ]
     },
 
-    // 兜底：未匹配重定向到首页或登录
-    { path: '/:pathMatch(.*)*', redirect: '/home' }
+    // 兜底：未匹配重定向到登录页面
+    { path: '/:pathMatch(.*)*', redirect: '/login' }
   ]
+})
+
+// 路由守卫 - 确保未登录用户不能访问受保护的页面
+router.beforeEach((to, from, next) => {
+  // 检查该路由或其父路由是否需要身份认证（处理嵌套路由）
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  
+  if (requiresAuth) {
+    // 获取token
+    const token = localStorage.getItem('token')
+    
+    // 如果没有token，重定向到登录页面
+    if (!token) {
+      ElMessage.warning('请先登录')
+      // 避免循环重定向
+      if (to.path !== '/login') {
+        next('/login')
+      } else {
+        next()
+      }
+    } else {
+      // 有token，继续访问
+      next()
+    }
+  } else {
+    // 不需要身份认证的路由，直接放行
+    next()
+  }
 })
 
 export default router

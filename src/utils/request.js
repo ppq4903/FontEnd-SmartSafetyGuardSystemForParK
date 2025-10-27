@@ -11,10 +11,11 @@ const request = axios.create({
 
 // 设置请求拦截器，增设包含JWT的请求头
 request.interceptors.request.use((config)=>{
-  const loginInfoStr=localStorage.getItem("loginInfo");
-  const loginInfo=JSON.parse(loginInfoStr);
-  if(loginInfo && loginInfo.token){
-    config.headers.set("token",loginInfo.token);
+  // 直接从localStorage获取token
+  const token = localStorage.getItem('token');
+  if(token){
+    // 根据后端要求，设置为Bearer格式的Authorization头
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 })

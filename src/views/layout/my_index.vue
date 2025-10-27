@@ -15,7 +15,9 @@ onMounted(() => { setNameDisplay() })
 const logout = () => {
   ElMessageBox.confirm('确认退出登录？', '提示', { type: 'warning' })
     .then(() => {
+      // 同时删除loginInfo和token
       localStorage.removeItem('loginInfo')
+      localStorage.removeItem('token')
       ElMessage.success('已退出')
       router.push('/login')
     })
@@ -27,31 +29,31 @@ const logout = () => {
   <div class="common-layout">
     <el-container>
       <el-header class="header">
-        <el-menu router default-active="[]" mode="horizontal">
+        <el-menu router :default-active="$route.path" mode="horizontal">
           <span class="title">园区智能安防</span>
 
-          <el-menu-item index="index">
+          <el-menu-item index="/home">
             <el-icon><house /></el-icon>首页
           </el-menu-item>
 
-          <el-menu-item index="monitor">
+          <el-menu-item index="/monitor">
             <el-icon><video-camera /></el-icon>实时监控
           </el-menu-item>
 
-          <el-menu-item index="alarm">
+          <el-menu-item index="/alarm">
             <el-icon><warn-triangle-filled /></el-icon>告警管理
           </el-menu-item>
 
-          <el-menu-item index="emp">
+          <el-menu-item index="/emp">
             <el-icon><user /></el-icon>员工管理
           </el-menu-item>
 
           <!-- ★ 修改：园区管理图标由 <setting /> 改为 <location /> -->
-          <el-menu-item index="area">
+          <el-menu-item index="/area">
             <el-icon><location /></el-icon>园区管理
           </el-menu-item>
 
-          <el-menu-item index="sys">
+          <el-menu-item index="/sys">
             <el-icon><setting /></el-icon>系统配置（摄像头管理）
           </el-menu-item>
 
