@@ -45,15 +45,7 @@
       <el-button @click="onReset">重置</el-button>
     </div>
 
-    <el-card class="json-card" shadow="never">
-      <template #header>
-        <div class="json-card-header">
-          <span class="card-title">原始 JSON（{{ total }} 条）</span>
-          <el-button size="small" @click="copyJson">复制 JSON</el-button>
-        </div>
-      </template>
-      <el-input class="json-area" type="textarea" :rows="10" v-model="rawJson" readonly />
-    </el-card>
+    <!-- JSON区域已隐藏 -->
 
     <el-table
       v-loading="loading"
@@ -161,19 +153,20 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   fetchCameraList, fetchFramePing,
   startAnalysis, stopAnalysis,
   getCameraById, createCamera, updateCamera
 } from '@/api/monitor'
+import { deleteCameras } from '@/api/camera'
 
 const loading = ref(false)
 const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const tableData = ref([])
-const rawJson = ref('[]')
+// rawJson 已移除
 const multipleSelection = ref([])
 const testingMap = reactive({})
 
@@ -217,7 +210,7 @@ async function onReset () {
 }
 async function onSizeChange (val) { pageSize.value = val; page.value = 1; await loadData() }
 async function onPageChange (val) { page.value = val; await loadData() }
-function copyJson () { navigator.clipboard?.writeText(rawJson.value); ElMessage.success('JSON 已复制') }
+// JSON相关功能已移除
 
 async function loadData (reset = false) {
   if (reset) page.value = 1
@@ -248,17 +241,14 @@ async function loadData (reset = false) {
       total.value = filtered.length
       const start = (page.value - 1) * pageSize.value
       tableData.value = JSON.parse(JSON.stringify(filtered.slice(start, start + pageSize.value)))
-      rawJson.value = JSON.stringify({ total: total.value, rows: filtered.slice(start, start + pageSize.value) }, null, 2)
     } else {
       tableData.value = JSON.parse(JSON.stringify(normalized))
       total.value = Number.isFinite(t) ? t : normalized.length
-      rawJson.value = JSON.stringify({ total: total.value, rows: normalized }, null, 2)
     }
   } catch (e) {
     ElMessage.error(e?.response?.data?.message || e?.message || '查询失败')
     tableData.value = []
     total.value = 0
-    rawJson.value = '[]'
   } finally {
     loading.value = false
   }
@@ -368,8 +358,57 @@ async function handleTest (row) {
 async function handleStart (row) { try { await startAnalysis(row.camera_id); ElMessage.success('已开启检测') } catch (e) { ElMessage.error(e?.message || '开启失败') } }
 async function handleStop (row) { try { await stopAnalysis(row.camera_id); ElMessage.success('已关闭检测') } catch (e) { ElMessage.error(e?.message || '关闭失败') } }
 function formatTime (_r, _c, cell) { return cell ? String(cell).replace('T', ' ') : '' }
-function handleBatchDelete () { ElMessage.info('请在此接入批量删除接口') }
-function handleDelete () { ElMessage.info('请在此接入删除接口') }
+async function handleBatchDelete () {
+  if (!multipleSelection.value.length) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${multipleSelection.value.length} 条记录吗？此操作不可撤销。`,
+      '警告',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const ids = multipleSelection.value.map(item => item.camera_id)
+    await deleteCameras(ids)
+    
+    ElMessage.success(`成功删除 ${multipleSelection.value.length} 条记录`)
+    await loadData(true)
+    multipleSelection.value = []
+  } catch (error) {
+    // 用户取消删除
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败，请重试')
+    }
+  }
+}
+
+async function handleDelete (row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除摄像头 "${row.camera_name}" 吗？此操作不可撤销。`,
+      '警告',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await deleteCameras(row.camera_id)
+    
+    ElMessage.success('删除成功')
+    await loadData()
+  } catch (error) {
+    // 用户取消删除
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败，请重试')
+    }
+  }
+}
 </script>
 
 <style scoped>
@@ -384,14 +423,7 @@ function handleDelete () { ElMessage.info('请在此接入删除接口') }
 .filter-item { display: flex; align-items: center; margin-left: 12px; }
 .filter-label { font-size: 14px; color: #606266; margin-right: 6px; white-space: nowrap; }
 
-.json-card { margin-bottom: 12px; }
-.json-card-header { display: flex; justify-content: space-between; align-items: center; }
-.card-title { font-weight: 600; }
-.json-area :deep(textarea) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  background: #f7f8fa;
-  border-radius: 8px;
-}
+/* JSON相关样式已移除 */
 .pager { display: flex; justify-content: flex-end; padding: 10px 6px 2px; }
 :deep(.el-tag) { margin-right: 4px; }
 </style>

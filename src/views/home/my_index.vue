@@ -1,5 +1,11 @@
 <template>
   <div class="home">
+    <!-- 操作按钮区域 -->
+    <div class="action-buttons">
+      <el-button type="primary" @click="$router.push('/alarm')">查看全部</el-button>
+      <el-button @click="exportReport">导出报表</el-button>
+    </div>
+    
     <!-- 上半部分并列布局 -->
     <div class="top-section">
       <!-- 未处理告警 -->
@@ -8,7 +14,6 @@
           <div class="left">
             <span class="badge">未处理告警（{{ pendingTotal }} 条）</span>
           </div>
-          <el-button type="primary" link @click="$router.push('/alarm')">查看全部</el-button>
         </div>
 
         <div class="alarm-list">
@@ -22,30 +27,14 @@
                 <span class="meta">摄像头：{{ a.camera_name || a.camera_id }}</span>
                 <span class="meta">时间：{{ formatTime(a.alarm_time) }}</span>
               </div>
-              <el-link v-if="a.snapshot_url" type="primary" :href="firstShot(a.snapshot_url)" target="_blank">
-                查看截图
-              </el-link>
+              
             </div>
           </template>
           <div v-else class="empty">暂无未处理告警</div>
         </div>
       </el-card>
 
-      <!-- 快捷入口 -->
-      <el-card shadow="never">
-        <div class="card-head"><el-icon><Compass /></el-icon> 快捷操作</div>
-        <div class="spacer"></div>
-        <div class="quick-entry">
-          <div class="button-row">
-            <el-button type="primary" @click="$router.push('/alarm')">告警中心</el-button>
-            <el-button @click="$router.push('/monitor')">实时监控</el-button>
-          </div>
-          <div class="button-row">
-            <el-button @click="$router.push('/sys')">摄像头管理</el-button>
-            <el-button @click="exportReport">导出报表</el-button>
-          </div>
-        </div>
-      </el-card>
+      <!-- 操作入口已移除 -->
     </div>
     <div class="spacer"></div>
     <!-- 网格区域 -->
@@ -390,6 +379,8 @@ onMounted(loadData)
 
 <style scoped>
 .home{display:flex;flex-direction:column;gap:12px}
+.action-buttons { margin-bottom: 12px; text-align: right; }
+.action-buttons .el-button { margin-left: 8px; }
 .top-section{display:flex;gap:12px}
 
 /* 顶部告警条 */
@@ -402,8 +393,8 @@ onMounted(loadData)
 .alarm-content > span.meta:first-of-type{margin-left:0;flex-shrink:0;min-width:180px}
 .alarm-content > span.meta:last-of-type{margin-left:0;flex-shrink:0}
 .alarm-item .meta{color:#909399}
-.alarm-bar{flex:1;max-width:70%}
-.top-section > .el-card:last-child{flex:1;max-width:30%}
+.alarm-bar{flex:1}
+.top-section > .el-card:last-child{flex:1;max-width:100%}
 
 /* 间隔 */
 .spacer{height:8px}

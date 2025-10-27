@@ -34,22 +34,7 @@
       </el-form>
     </el-card>
 
-    <!-- 原始 JSON（全部数据；仅此区域字体缩小到 0.8） -->
-    <el-card class="mb-12 json-card">
-      <template #header>
-        <div class="card-header">
-          <span>原始 JSON（共 {{ allRows.length }} 条）</span>
-          <el-button size="small" @click="copyJson">复制 JSON</el-button>
-        </div>
-      </template>
-      <el-input
-        class="json-input"
-        v-model="jsonText"
-        type="textarea"
-        :autosize="{ minRows: 10, maxRows: 16 }"
-        readonly
-      />
-    </el-card>
+    <!-- JSON区域已隐藏 -->
 
     <!-- 表格 -->
     <el-card>
@@ -101,10 +86,9 @@
 
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <!-- 修改点：link 按钮 + 阻止冒泡 -->
-            <el-button link type="primary" @click.stop.prevent="openDetail(row)">详情</el-button>
+            <el-button link type="primary" @click="openDetail(row)">详情</el-button>
             <el-divider direction="vertical" />
-            <el-link type="success" @click="openHandle(row)">处理</el-link>
+            <el-button link type="success" @click="openHandle(row)">处理</el-button>
             <el-divider direction="vertical" />
             <el-popconfirm
               width="220"
@@ -112,7 +96,7 @@
               @confirm="onDelete(row)"
             >
               <template #reference>
-                <el-link type="danger">删除</el-link>
+                <el-button link type="danger">删除</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -135,7 +119,12 @@
     </el-card>
 
     <!-- 处理弹窗 -->
-    <el-dialog v-model="handleDialog.visible" title="处理告警" width="680px">
+    <el-dialog
+      v-model="handleDialog.visible"
+      title="处理告警"
+      width="680px"
+      append-to-body
+    >
       <el-form
         ref="handleFormRef"
         :model="handleDialog.form"
@@ -209,7 +198,12 @@
     </el-dialog>
 
     <!-- 详情弹窗 -->
-    <el-dialog v-model="detailDialog.visible" title="告警详情" width="980px">
+    <el-dialog
+      v-model="detailDialog.visible"
+      title="告警详情"
+      width="980px"
+      append-to-body
+    >
       <div class="detail-head">
         <div class="detail-line">
           <span class="label">告警时间：</span>
@@ -222,7 +216,7 @@
         <div class="detail-line">
           <span class="label">告警类型：</span>
           <el-tag :type="typeTagType(detailDialog.data.alarm_type)">
-            {{ txtType(detailDialog.data.alarm_type) }}
+            {{ AlarmTypeMap[detailDialog.data.alarm_type] ?? '未知' }}
           </el-tag>
         </div>
       </div>
@@ -243,7 +237,7 @@
       <div class="detail-status">
         <span class="label">当前状态：</span>
         <el-tag :type="statusTagType(detailDialog.data.alarm_status)" effect="light">
-          {{ txtStatus(detailDialog.data.alarm_status) }}
+          {{ AlarmStatusMap[rowStatus(detailDialog.data.alarm_status)] ?? '未知' }}
         </el-tag>
       </div>
 
@@ -314,18 +308,14 @@ const AlarmTypeMap = { 0: '安全规范', 1: '区域入侵', 2: '火警' }
 const AlarmStatusMap = { 0: '未处理', 1: '误报', 2: '处理中（已派单）', 3: '处理完成' }
 const HandleActionMap = { 0: '确认误报', 1: '已派单', 2: '处理完成' }
 const AnalysisModeMap = { 0: '无', 1: '全部', 2: '安全规范', 3: '区域入侵', 4: '火警' }
+// 添加摄像头状态映射
+const CameraStatusMap = { 0: '离线', 1: '在线' }
 
 /** 颜色：未处理=灰(info)，误报=黄，处理中=蓝，完成=绿 */
 const typeTagType = (t) => (t === 2 ? 'danger' : t === 0 ? 'warning' : 'info')
 const statusTagType = (s) => s === 0 ? 'info' : s === 1 ? 'warning' : s === 2 ? 'primary' : 'success'
 const recordActionTagType = (a) => (a === 2 ? 'success' : a === 1 ? 'primary' : 'warning')
-
-/** 安全文本函数（避免模板复杂表达式导致渲染报错） */
-const txtType = (v) => (v in AlarmTypeMap ? AlarmTypeMap[v] : '未知')
-const txtStatus = (v) => {
-  const k = Number.isFinite(v) ? v : 0
-  return AlarmStatusMap[k] || '未知'
-}
+const rowStatus = (s) => Number.isFinite(s) ? s : 0
 
 /** —— 查询与前端稳定分页 —— */
 const query = reactive({ alarm_type: undefined, alarm_status: undefined })
@@ -345,8 +335,7 @@ const tableRows = computed(() => {
 })
 const rowIndex = (i) => (pagination.page - 1) * pagination.size + i + 1
 
-// JSON（展示全部）
-const jsonText = computed(() => JSON.stringify({ total: allRows.value.length, rows: allRows.value }, null, 2))
+// JSON相关计算属性已移除
 
 // 兼容 axios 响应
 const extract = (res) => res?.data?.data ?? res?.data ?? res
@@ -389,11 +378,7 @@ const onReset  = () => { query.alarm_type = undefined; query.alarm_status = unde
 const onPageChange = (p) => (pagination.page = p)
 const onSizeChange = (s) => { pagination.size = s; pagination.page = 1 }
 
-/** —— 复制 JSON（全部） —— */
-const copyJson = async () => {
-  await navigator.clipboard.writeText(jsonText.value)
-  ElMessage.success('已复制全部告警 JSON')
-}
+/** JSON复制功能已移除 */
 
 /** —— 删除 —— */
 const multipleSelection = ref([])
@@ -442,7 +427,7 @@ const openHandle = async (row) => {
   } finally { operatorLoading.value = false }
 }
 
-// 当前登录用户（取不到使用 id=1, name='Admin'）
+// 当前登录用户（取不到则使用 id=1, name='Admin'）
 const getLoginUser = () => {
   try {
     const idStr = localStorage.getItem('current_user_id')
@@ -455,6 +440,30 @@ const getLoginUser = () => {
   return { id: 1, name: 'Admin' }
 }
 
+/** —— 关键：详情按钮 —— */
+const detailDialog = reactive({ visible: false, data: {} })
+const handleRecords = ref([])
+const cameraInfo = ref(null)
+
+const openDetail = async (row) => {
+  // 先打开，再拉数据；即使接口失败也能看到弹窗
+  detailDialog.data = { ...row }
+  detailDialog.visible = true
+  try {
+    const rr = await getHandleRecords(row.alarm_id)
+    handleRecords.value = (extract(rr) || [])
+  } catch (e) {
+    handleRecords.value = []
+  }
+  try {
+    const cc = await getCameraInfo(row.camera_id)
+    cameraInfo.value = extract(cc) || null
+  } catch (e) {
+    cameraInfo.value = null
+  }
+}
+
+/** —— 提交处理 —— */
 const submitHandle = async () => {
   await handleFormRef.value.validate()
   handleDialog.submitting = true
@@ -464,16 +473,13 @@ const submitHandle = async () => {
     let detail = (handleDialog.form.handle_detail || '').trim()
 
     if (action === 1) {
-      // 派单：处理人为所选操作员；若备注为空，自动生成
       const op = operatorOptions.value.find(u => u.user_id === handleDialog.form.handle_user_id)
       handler = { id: op?.user_id ?? 1, name: (op?.name || op?.user_name || 'Admin') }
       if (!detail) detail = `派单给操作员：${handler.name}（ID: ${handler.id}）`
     } else {
-      // 误报 / 处理完成：处理人为当前登录用户
       handler = getLoginUser()
     }
 
-    // —— 只发 Pydantic 字段，避免 422 —— //
     const payload = {
       alarm_id: handleDialog.form.alarm_id,
       handler_user_id: handler.id,
@@ -484,15 +490,15 @@ const submitHandle = async () => {
     if (action === 2 && url) payload.handle_attachment_url = url
 
     await createHandleRecord(payload)
-    ElMessage.success('处理记录提交成功')
 
-    // —— 本地即时回写：处理人 & 状态（派单=2、误报=1、完成=3） —— //
+    // 本地回写
     const row = handleDialog.row
     row.handle_user_name = handler.name
     if (action === 1) row.alarm_status = 2
     else if (action === 0) row.alarm_status = 1
     else if (action === 2) row.alarm_status = 3
 
+    ElMessage.success('处理记录提交成功')
     handleDialog.visible = false
     fetchAllData()
   } finally {
@@ -510,30 +516,25 @@ const customUpload = async (options) => {
   const { file, onError, onSuccess } = options
   try {
     const base64 = await readAsBase64(file)
+    // 确保文件扩展名包含前导点(.)
     const ext = file.name.split('.').pop()
-    const res = await uploadAttachment({ file_content: base64.split(',')[1], file_extension: ext })
+    const file_extension = `.${ext.toLowerCase()}`
+    
+    // 直接传递参数，不使用attachment_data包装
+    const res = await uploadAttachment({
+      file_content: base64.split(',')[1],
+      file_extension: file_extension
+    })
     const url = extract(res)
     handleDialog.form.attachment_url = (typeof url === 'string') ? url : url?.data || url?.file_url || ''
     onSuccess(res, file)
-  } catch (e) { onError(e) }
+  } catch (e) {
+    console.error('附件上传失败:', e)
+    ElMessage.error('附件上传失败，请重试')
+    onError(e)
+  }
 }
 const readAsBase64 = (file) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file) })
-
-/** —— 详情 —— */
-const detailDialog = reactive({ visible: false, data: {} })
-const handleRecords = ref([])
-const cameraInfo = ref(null)
-
-const openDetail = async (row) => {
-  detailDialog.data = row
-  detailDialog.visible = true
-
-  const rr = await getHandleRecords(row.alarm_id)
-  handleRecords.value = extract(rr) || []
-
-  const cc = await getCameraInfo(row.camera_id)
-  cameraInfo.value = extract(cc) || null
-}
 
 /** —— 工具 —— */
 const formatDatetime = (val) => {
@@ -558,9 +559,7 @@ onMounted(async () => {
 .table-total { color: var(--el-text-color-secondary); font-size: 13px; }
 .pagination { margin-top: 12px; display: flex; justify-content: flex-end; }
 
-/* 仅 JSON 区域缩小字体 */
-.json-card { font-size: 0.8em; }
-.json-input :deep(.el-textarea__inner) { font-size: 12px; line-height: 1.3; }
+/* JSON相关样式已移除 */
 
 /* 详情 */
 .detail-head { margin-bottom: 12px; }

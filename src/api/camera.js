@@ -4,16 +4,16 @@ import request from '@/utils/request'
 /**
  * 约定：
  * baseURL 由 request.js 配置为 '/backend'（例如代理到 http://localhost:8089/api/v1）
- * 这里写 '/cameraInfos/...' 即可。
+ * 这里写 '/camera_infos/...' 即可。
  *
  * 后端（FastAPI）接口（见 /docs）：
- * GET  /cameraInfos/search
- * GET  /cameraInfos/{camera_info_id}
- * GET  /cameraInfos/
- * POST /cameraInfos/
- * PUT  /cameraInfos/{camera_info_id}
- * DELETE /cameraInfos/{camera_info_ids}
- * GET  /cameraInfos/test/{camera_id}
+ * GET  /camera_infos/search
+ * GET  /camera_infos/{camera_info_id}
+ * GET  /camera_infos/
+ * POST /camera_infos/
+ * PUT  /camera_infos/{camera_info_id}
+ * DELETE /camera_infos/{camera_info_ids}
+ * GET  /camera_infos/test/{camera_id}
  */
 
 // ---------- 常量枚举 ----------
@@ -70,25 +70,28 @@ const normalizePageParams = (params = {}) => {
 
 // ---------- 接口 ----------
 export const searchCameras = (params = {}) => {
-  return request.get('/cameraInfos/search', { params: normalizePageParams(params) })
+  return request.get('/camera_infos/search', { params: normalizePageParams(params) })
 }
 
 /** 获取“尽可能全部”的数据；FastAPI 这条默认 limit=10，这里显式传一个很大的 limit */
 export const getAllCameras = (skip = 0, limit = 100000) => {
-  return request.get('/cameraInfos/', { params: { skip, limit } })
+  return request.get('/camera_infos/', { params: { skip, limit } })
 }
 
-export const getCameraById = (id) => request.get(`/cameraInfos/${id}`)
+export const getCameraById = (id) => request.get(`/camera_infos/${id}`)
 
-export const createCamera = (payload) => request.post('/cameraInfos/', payload)
+export const createCamera = (payload) => request.post('/camera_infos/', payload)
 
-/** 注意：这里带结尾斜杠，避免路由不匹配被重定向到登录 */
-export const updateCamera = (id, payload) => request.put(`/cameraInfos/${id}/`, payload)
+/** 注意：保持接口路径一致性 */
+export const updateCamera = (id, payload) => request.put(`/camera_infos/${id}`, payload)
 
-/** 支持数组或逗号分隔字符串；同样带结尾斜杠 */
+/** 支持数组或逗号分隔字符串 */
 export const deleteCameras = (ids) => {
   const idStr = Array.isArray(ids) ? ids.join(',') : ids
-  return request.delete(`/cameraInfos/${idStr}/`)
+  return request.delete(`/camera_infos/${idStr}`)
 }
 
-export const testCamera = (id) => request.get(`/cameraInfos/test/${id}`)
+export const testCamera = (id) => request.get(`/camera_infos/test/${id}`)
+
+/** 测试摄像头连接 */
+export const fetchFramePing = (id) => request.get(`/camera_infos/test/${id}`)

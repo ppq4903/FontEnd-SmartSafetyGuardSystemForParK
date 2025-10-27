@@ -32,18 +32,7 @@
       </div>
     </div>
 
-    <!-- 原始 JSON -->
-    <el-card shadow="never" class="json-card">
-      <div class="json-header">
-        <div class="json-title">原始 JSON（{{ jsonCount }} 条）</div>
-        <div class="json-actions">
-          <el-button size="small" @click="copyRaw">复制 JSON</el-button>
-        </div>
-      </div>
-      <div class="json-box">
-        <pre class="json-pre">{{ rawText }}</pre>
-      </div>
-    </el-card>
+    <!-- JSON区域已隐藏 -->
 
     <!-- 数据表格 -->
     <el-card shadow="never" class="table-card">
@@ -116,7 +105,7 @@ export default {
   name: 'AreaIndex',
   data () {
     return {
-      rawText: '',
+      // rawText 已移除
       loading: false,
       saving: false,
       query: { park_area: '' },
@@ -137,30 +126,19 @@ export default {
     }
   },
   computed: {
-    jsonCount () {
-      try {
-        const obj = JSON.parse(this.rawText || '{}')
-        const rows = obj?.rows || obj?.data?.rows
-        if (Array.isArray(rows)) return rows.length
-        if (typeof obj?.total === 'number') return obj.total
-        return 0
-      } catch { return 0 }
-    }
+    // JSON相关计算属性已移除
   },
   created () { this.fetchAndRender() },
   methods: {
     formatTime (v) { return v ? String(v).replace('T', ' ').replace(/Z$/, '') : '' },
     async fetchAndRender () {
       try {
-        const res = await this.fetchData()
-        const dataPart = res?.data ?? res
-        this.rawText = JSON.stringify(dataPart, null, 2)
+        await this.fetchData()
       } catch (e) {
         const err = {
           message: e?.message, status: e?.response?.status,
           url: e?.config?.url, data: e?.response?.data
         }
-        this.rawText = JSON.stringify(err, null, 2)
         ElMessage.error(`接口访问异常，Status：${err.status || '-'}，${e?.message || ''}`)
       }
     },
@@ -203,6 +181,25 @@ export default {
         if (!valid) return
         this.saving = true
         try {
+          // 检查园区名称是否已存在
+          const checkParams = { park_area: this.form.park_area, skip: 0, limit: 1 }
+          const { data: checkData } = await selectPage(checkParams)
+          const existingRows = checkData?.data?.rows || checkData?.rows || []
+          
+          // 编辑模式下排除当前编辑的记录
+          const isExisting = existingRows.some(row => {
+            if (this.isEdit) {
+              return row.park_area_id !== this.form.park_area_id
+            }
+            return true
+          })
+          
+          if (existingRows.length > 0 && isExisting) {
+            ElMessage.warning('该园区区域已存在')
+            return
+          }
+          
+          // 原有保存逻辑
           if (this.isEdit) {
             await update(this.form)
             ElMessage.success('更新成功')
@@ -253,10 +250,7 @@ export default {
         }
       }).catch(() => {})
     },
-    copyRaw () {
-      if (!this.rawText) return
-      navigator.clipboard?.writeText(this.rawText).then(() => ElMessage.success('已复制 JSON'))
-    }
+    // JSON复制功能已移除
   }
 }
 </script>
@@ -276,27 +270,7 @@ export default {
 .compact-form :deep(.el-form-item) { margin-bottom: 0; margin-right: 8px; }
 .w-320 { width: 320px; }
 
-/* JSON 卡片 */
-.json-card { margin-bottom: 10px; }
-.json-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.json-title { font-weight: 600; }
-.json-actions { display: flex; gap: 8px; }
-.json-box {
-  border: 1px solid #e5e7eb;
-  background: #f6f8fa;
-  border-radius: 8px;
-  padding: 10px;
-  max-height: 260px;
-  overflow: auto;
-}
-.json-pre {
-  margin: 0;
-  line-height: 1.6;
-  font-size: 13px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
+/* JSON相关样式已移除 */
 
 /* 表格 */
 .table-card { margin-top: 10px; }

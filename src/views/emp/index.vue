@@ -1,15 +1,6 @@
 <template>
   <div class="page-emp">
-    <!-- 原始返回（只读） -->
-    <el-card shadow="never" class="mb-12">
-      <div class="topline">
-        <div class="title">接口原始返回（只读）</div>
-        <div>
-          <el-button size="small" type="primary" @click="fetchAndRender">刷新</el-button>
-        </div>
-      </div>
-      <el-input type="textarea" :rows="6" v-model="rawText" readonly />
-    </el-card>
+    <!-- JSON区域已隐藏 -->
 
 
     <!-- 工具栏 -->
@@ -142,11 +133,38 @@ export default {
       loading: false,
       saving: false,
 
-      // 原始 JSON
-      rawText: '',
+      // JSON相关变量已移除
 
       // 前端全量数据
       allRows: [],
+      
+      // 表单验证规则
+      empRules: {
+        name: [
+          { required: true, message: '请输入姓名', trigger: 'blur' },
+          { min: 1, max: 20, message: '姓名长度应在1-20个字符之间', trigger: 'blur' }
+        ],
+        user_name: [
+          { required: true, message: '请输入账号', trigger: 'blur' },
+          { min: 1, max: 20, message: '账号长度应在1-20个字符之间', trigger: 'blur' }
+        ],
+        user_role: [
+          { required: true, message: '请选择角色', trigger: 'change' }
+        ],
+        phone: [
+          { required: true, message: '请输入电话号码', trigger: 'blur' },
+          { min: 11, max: 11, message: '电话号码长度应为11位', trigger: 'blur' },
+          { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号码', trigger: 'blur' }
+        ],
+        password: [
+          { required: true, message: '请输入密码', trigger: 'blur', validator: this.validatePasswordRequired },
+          { min: 6, max: 32, message: '密码长度应在6-32个字符之间', trigger: 'blur' }
+        ],
+        confirmPassword: [
+          { required: true, message: '请确认密码', trigger: 'blur', validator: this.validateConfirmPasswordRequired },
+          { validator: this.validatePassword, trigger: 'blur' }
+        ]
+      },
 
       // 分页/排序/筛选（前端）
       pageSize: 10,
@@ -223,8 +241,6 @@ export default {
         // 一次取“足够多”的数据，避免后端 limit 默认 10 导致“最多 10 条”的错觉
         const res = await selectPage({ skip: 0, limit: 10000 })
         let payload = res.data
-        // 回显原始返回
-        this.rawText = typeof payload === 'string' ? payload : JSON.stringify(payload)
         // 解析对象，兼容 Result 包裹
         if (typeof payload === 'string') {
           try { payload = JSON.parse(payload) } catch (_) {}
@@ -235,17 +251,12 @@ export default {
         // 越界回退
         const maxPage = Math.max(1, Math.ceil(this.filteredRows.length / this.pageSize))
         if (this.currentPage > maxPage) this.currentPage = maxPage
-        this.formatRaw()
       } catch (e) {
         const code = e?.response?.status
         this.$message.error(`加载失败${code ? '，Status：' + code : ''}`)
       } finally {
         this.loading = false
       }
-    },
-
-    formatRaw () {
-      try { this.rawText = JSON.stringify(JSON.parse(this.rawText), null, 2) } catch (_) {}
     },
 
     mapRows (rows) {
@@ -314,6 +325,42 @@ export default {
     onDialogClose () {
       this.empForm = this.getEmptyForm()
     },
+    
+    // 验证密码一致性
+    validatePassword (rule, value, callback) {
+      // 只有在需要密码的情况下才验证一致性
+      if ((this.dialogMode === 'add' || this.empForm.resetPassword) && value !== this.empForm.password) {
+        callback(new Error('两次输入的密码不一致'))
+      } else {
+        callback()
+      }
+    },
+    
+    // 动态验证密码是否必填
+    validatePasswordRequired (rule, value, callback) {
+      if (this.dialogMode === 'add' || (this.dialogMode === 'edit' && this.empForm.resetPassword)) {
+        if (!value || value.trim() === '') {
+          callback(new Error('请输入密码'))
+        } else {
+          callback()
+        }
+      } else {
+        callback()
+      }
+    },
+    
+    // 动态验证确认密码是否必填
+    validateConfirmPasswordRequired (rule, value, callback) {
+      if (this.dialogMode === 'add' || (this.dialogMode === 'edit' && this.empForm.resetPassword)) {
+        if (!value || value.trim() === '') {
+          callback(new Error('请确认密码'))
+        } else {
+          callback()
+        }
+      } else {
+        callback()
+      }
+    },
 
     // 统一提交
     onSubmit () {
@@ -354,14 +401,19 @@ export default {
           await this.fetchAndRender()
         } catch (e) {
           const code = e?.response?.status
-          const raw = e?.response?.data?.detail ?? e?.response?.data
-          let detail = ''
-          if (raw) {
-            try { detail = typeof raw === 'string' ? raw : JSON.stringify(raw) } catch (_) { detail = String(raw) }
-          } else if (e?.code === 'NO_ID') {
-            detail = '缺少或非法的 user_id'
+          // 对于422错误，显示友好提示
+          if (code === 422) {
+            this.$message.error('请完善员工信息')
+          } else {
+            const raw = e?.response?.data?.detail ?? e?.response?.data
+            let detail = ''
+            if (raw) {
+              try { detail = typeof raw === 'string' ? raw : JSON.stringify(raw) } catch (_) { detail = String(raw) }
+            } else if (e?.code === 'NO_ID') {
+              detail = '缺少或非法的 user_id'
+            }
+            this.$message.error(`保存失败${code ? '，Status：' + code : ''}${detail ? '，' + detail : ''}`)
           }
-          this.$message.error(`保存失败${code ? '，Status：' + code : ''}${detail ? '，' + detail : ''}`)
         } finally {
           this.saving = false
         }
