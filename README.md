@@ -2,7 +2,7 @@
 
 ## 项目信息
 - **前端仓库地址**: [https://github.com/ppq4903/FontEnd-SmartSafetyGuardSystemForParK.git](https://github.com/ppq4903/FontEnd-SmartSafetyGuardSystemForParK.git)
-- **后端仓库地址**: [https://github.com/ppq4903/SmartSafetyGuardSystemForPark.git](https://github.com/ppq4903/SmartSafetyGuardSystemForPark.git)
+- **后端仓库地址**: [https://github.com/dayuan-Xu/SmartSafetyGuardSystemForPark.git](https://github.com/dayuan-Xu/SmartSafetyGuardSystemForPark.git)
 
 ## 项目简介
 这是一个基于Vue 3 + Element Plus开发的现代化园区智能安防系统前端界面，专为企业园区、工厂、社区等场所的安全监控需求设计。系统提供直观的操作界面和完整的功能模块，帮助安全管理人员高效地进行监控管理和告警处理。
