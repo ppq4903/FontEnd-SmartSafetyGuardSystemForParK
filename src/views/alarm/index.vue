@@ -284,7 +284,7 @@
       </div>
 
       <template #footer>
-        <el-button type="primary" @click="detailDialog.visible = false">关闭</el-button>
+        <el-button type="primary" @click="closeDetailDialog">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -445,20 +445,42 @@ const detailDialog = reactive({ visible: false, data: {} })
 const handleRecords = ref([])
 const cameraInfo = ref(null)
 
+// 关闭详情弹窗函数，确保即使是未处理的告警记录也能正常关闭
+const closeDetailDialog = () => {
+  // 先清空相关数据，再关闭弹窗，避免数据绑定导致的DOM渲染异常
+  handleRecords.value = []
+  cameraInfo.value = null
+  // 使用setTimeout确保DOM更新后再关闭弹窗
+  setTimeout(() => {
+    detailDialog.visible = false
+  }, 0)
+}
+
 const openDetail = async (row) => {
-  // 先打开，再拉数据；即使接口失败也能看到弹窗
+  // 先清空之前的数据，避免数据污染
+  handleRecords.value = []
+  cameraInfo.value = null
+  
+  // 设置新数据并打开弹窗
   detailDialog.data = { ...row }
   detailDialog.visible = true
+  
   try {
+    // 获取处理记录
     const rr = await getHandleRecords(row.alarm_id)
-    handleRecords.value = (extract(rr) || [])
+    // 确保处理记录始终是数组格式，即使是空记录
+    handleRecords.value = Array.isArray(extract(rr)) ? extract(rr) : []
   } catch (e) {
+    console.error('获取处理记录失败:', e)
     handleRecords.value = []
   }
+  
   try {
+    // 获取摄像头信息
     const cc = await getCameraInfo(row.camera_id)
     cameraInfo.value = extract(cc) || null
   } catch (e) {
+    console.error('获取摄像头信息失败:', e)
     cameraInfo.value = null
   }
 }
